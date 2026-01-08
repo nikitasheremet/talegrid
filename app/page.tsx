@@ -12,7 +12,9 @@ export default function Home() {
             key={universe}
             className="my-4 cursor-pointer hover:bg-gray-100 p-2 rounded-md"
           >
-            <Link href={`universe/${universe}`}>{universe}</Link>
+            <Link className="w-full block" href={`universe/${universe}`}>
+              {universe}
+            </Link>
           </li>
         ))}
       </ul>

@@ -1,0 +1,37 @@
+"use client";
+
+import { useState } from "react";
+
+export default function TablCell({
+  rowId,
+  cellValue,
+  updateCell,
+}: {
+  rowId: string;
+  cellValue: {
+    value: string;
+    id: string;
+  };
+  updateCell: (rowId: string, attributeName: string, value: string) => void;
+}) {
+  const debounceTimeout = 1000;
+  let debouceTimer: NodeJS.Timeout;
+  const [value, setCellValue] = useState(cellValue.value);
+  function updateValue(rowId: string, cellId: string, event: any) {
+    clearTimeout(debouceTimer);
+
+    debouceTimer = setTimeout(() => {
+      updateCell(rowId, cellId, event.target.value);
+    }, debounceTimeout);
+
+    setCellValue(event.target.value);
+  }
+  return (
+    <td>
+      <input
+        value={value}
+        onChange={(event) => updateValue(rowId, cellValue.id, event)}
+      ></input>
+    </td>
+  );
+}
