@@ -2,6 +2,9 @@
 
 import { useState } from "react";
 
+const debounceTimeout = 1000;
+let debouceTimer: NodeJS.Timeout;
+
 export default function TablCell({
   rowId,
   cellValue,
@@ -14,9 +17,8 @@ export default function TablCell({
   };
   updateCell: (rowId: string, attributeName: string, value: string) => void;
 }) {
-  const debounceTimeout = 1000;
-  let debouceTimer: NodeJS.Timeout;
   const [value, setCellValue] = useState(cellValue.value);
+  ("use client");
   function updateValue(rowId: string, cellId: string, event: any) {
     clearTimeout(debouceTimer);
 
@@ -31,6 +33,7 @@ export default function TablCell({
       <input
         value={value}
         onChange={(event) => updateValue(rowId, cellValue.id, event)}
+        suppressHydrationWarning={true}
       ></input>
     </td>
   );

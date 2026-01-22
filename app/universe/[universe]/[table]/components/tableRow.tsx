@@ -30,7 +30,7 @@ export default function TableRow({
     <tr>
       {rowValues.map((value) => (
         <TableCell
-          key={Math.random()}
+          key={value.id + value.value.slice(10)}
           rowId={id}
           cellValue={value}
           updateCell={updateCell}

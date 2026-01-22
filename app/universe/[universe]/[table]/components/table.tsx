@@ -1,9 +1,11 @@
+import { Attributes } from "../page";
 import TableRow from "./tableRow";
 
 export function Table({
   rows,
   columns,
   updateCell,
+  addNewEmptyRow,
 }: {
   rows: {
     id: string;
@@ -19,6 +21,7 @@ export function Table({
     name: string;
   }[];
   updateCell: (rowId: string, cellId: string, value: string) => void;
+  addNewEmptyRow: (rowId: string, attributes: Attributes) => void;
 }) {
   return (
     <table className="table-fixed shadow-xl bg-slate-100">
@@ -36,6 +39,7 @@ export function Table({
       <tbody>
         {rows.map((row) => (
           <TableRow
+            key={row.id}
             id={row.id}
             attributes={row.attributes}
             updateCell={updateCell}

@@ -3,12 +3,16 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "node scripts/dev.js",
+    "dev:no-db": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "seed": "tsx scripts/seed.ts"
   },
   "dependencies": {
+    "mongodb": "^7.0.0",
+    "mongoose": "^9.1.5",
     "next": "16.0.10",
     "react": "19.2.0",
     "react-dom": "19.2.0"
@@ -22,6 +26,7 @@
     "eslint-config-next": "16.0.5",
     "prettier": "^3.7.1",
     "tailwindcss": "^4",
+    "tsx": "^4.21.0",
     "typescript": "^5"
   }
 }
