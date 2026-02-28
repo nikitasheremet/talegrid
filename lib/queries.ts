@@ -1,7 +1,12 @@
 import { connectDB } from "./db";
 import { Universe, Table, TableRow } from "./models";
-import type { IUniverse, ITable, ITableRow } from "./models";
+import type { IUniverse, ITable, ITableRow, IAttributeValue } from "./models";
 import { Types } from "mongoose";
+
+async function getUniverseDocumentByName(name: string) {
+  await connectDB();
+  return Universe.findOne({ name }).exec();
+}
 
 // Fetch all universes
 export async function getAllUniverses(): Promise<IUniverse[]> {
@@ -13,16 +18,15 @@ export async function getAllUniverses(): Promise<IUniverse[]> {
 export async function getUniverseByName(
   name: string,
 ): Promise<IUniverse | null> {
-  await connectDB();
-  return Universe.findOne({ name }).lean().exec();
+  const universe = await getUniverseDocumentByName(name);
+  return universe ? universe.toObject() : null;
 }
 
 // Fetch all tables for a universe
 export async function getTablesByUniverseName(
   universeName: string,
 ): Promise<(ITable & { universeId: IUniverse })[]> {
-  await connectDB();
-  const universe = await Universe.findOne({ name: universeName });
+  const universe = await getUniverseDocumentByName(universeName);
   if (!universe) return [];
 
   return Table.find({ universeId: universe._id })
@@ -36,8 +40,7 @@ export async function getTableByNameAndUniverse(
   universeName: string,
   tableName: string,
 ): Promise<(ITable & { universeId: IUniverse }) | null> {
-  await connectDB();
-  const universe = await Universe.findOne({ name: universeName });
+  const universe = await getUniverseDocumentByName(universeName);
   if (!universe) return null;
 
   return Table.findOne({ name: tableName, universeId: universe._id })
@@ -67,12 +70,25 @@ export async function createTable(
   tableName: string,
   columns: Array<{ name: string; type: string }>,
 ): Promise<ITable | null> {
-  await connectDB();
-  const universe = await Universe.findOne({ name: universeName });
+  const universe = await getUniverseDocumentByName(universeName);
   if (!universe) return null;
 
+  const normalizedTableName = tableName.trim();
+  if (!normalizedTableName) return null;
+
+  const existingTable = await Table.findOne({
+    name: normalizedTableName,
+    universeId: universe._id,
+  })
+    .lean()
+    .exec();
+
+  if (existingTable) {
+    return existingTable;
+  }
+
   const table = new Table({
-    name: tableName,
+    name: normalizedTableName,
     universeId: universe._id,
     columns,
   });
@@ -82,7 +98,7 @@ export async function createTable(
 // Create a new table row
 export async function createTableRow(
   tableId: string | Types.ObjectId,
-  attributes: Record<string, { type: string; value: any }>,
+  attributes: Record<string, IAttributeValue>,
 ): Promise<ITableRow> {
   await connectDB();
   const row = new TableRow({
@@ -95,7 +111,7 @@ export async function createTableRow(
 // Update a table row
 export async function updateTableRow(
   rowId: string | Types.ObjectId,
-  attributes: Record<string, { type: string; value: any }>,
+  attributes: Record<string, IAttributeValue>,
 ): Promise<ITableRow | null> {
   await connectDB();
   return TableRow.findByIdAndUpdate(rowId, { attributes }, { new: true })

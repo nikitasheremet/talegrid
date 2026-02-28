@@ -1,5 +1,11 @@
-import Link from "next/link";
+import { revalidatePath } from "next/cache";
 import { getTablesByUniverseName } from "@/lib/queries";
+import { createTable } from "@/lib/queries";
+import {
+  normalizeTableName,
+  parseTableColumnsFromFormData,
+} from "@/lib/table-utils";
+import TablesList from "./components/tablesList";
 
 export default async function UniverseView({
   params,
@@ -9,23 +15,31 @@ export default async function UniverseView({
   const { universe } = await params;
   const tables = await getTablesByUniverseName(universe);
 
+  async function addTable(formData: FormData) {
+    "use server";
+
+    const tableName = normalizeTableName(formData.get("tableName"));
+    const columns = parseTableColumnsFromFormData(formData);
+    if (!tableName) return;
+
+    await createTable(universe, tableName, columns);
+    revalidatePath(`/universe/${universe}`, "page");
+  }
+
   return (
     <>
       <div className="flex flex-col items-center p-5 gap-5">
         <h1 className="text-xl">
           Welcome to <span className="font-bold">{universe}</span>
         </h1>
-        <ul className="self-left">
-          {tables.map((table) => {
-            return (
-              <li key={table._id.toString()} className="mb-5">
-                <Link href={`/universe/${universe}/${table.name}`}>
-                  {table.name}
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
+        <TablesList
+          universe={universe}
+          initialTables={tables.map((table) => ({
+            id: table._id.toString(),
+            name: table.name,
+          }))}
+          addTable={addTable}
+        />
       </div>
     </>
   );
