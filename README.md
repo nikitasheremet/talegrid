@@ -20,6 +20,27 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## Local database setup (first run)
+
+For first-time local setup, initialize MongoDB and create required collections:
+
+```bash
+npm run db:init
+```
+
+This command:
+
+- connects to `MONGODB_URI` (or `mongodb://localhost:27017/talegrid` by default),
+- creates the `universes`, `tables`, and `tablerows` collections if missing,
+- ensures indexes for all models,
+- does **not** delete existing data.
+
+If you want demo data as well, run:
+
+```bash
+npm run seed
+```
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:
