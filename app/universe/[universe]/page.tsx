@@ -38,6 +38,14 @@ export default async function UniverseView({
             id: table._id.toString(),
             name: table.name,
           }))}
+          availableTables={tables.map((table) => ({
+            id: table._id.toString(),
+            name: table.name,
+            columns: table.columns.map((column) => ({
+              name: column.name,
+              type: column.type,
+            })),
+          }))}
           addTable={addTable}
         />
       </div>

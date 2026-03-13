@@ -2,6 +2,8 @@
 
 import { useRef, useState, type KeyboardEvent } from "react";
 import {
+  DEFAULT_LINK_DISPLAY_FIELD,
+  SELF_LINK_TARGET_TABLE,
   TABLE_COLUMN_TYPES,
   normalizeColumnName,
   normalizeTableName,
@@ -12,6 +14,8 @@ interface PendingColumn {
   id: string;
   name: string;
   type: TableColumnType;
+  targetTableId?: string;
+  displayField?: string;
 }
 
 function createPendingColumnId() {
@@ -27,18 +31,31 @@ function createPendingColumnId() {
 
 export default function CreateTableModal({
   onCreate,
+  availableTables,
 }: {
   onCreate: (formData: FormData) => Promise<void>;
+  availableTables: Array<{
+    id: string;
+    name: string;
+    columns: Array<{ name: string; type: string }>;
+  }>;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [tableName, setTableName] = useState("");
   const [pendingColumns, setPendingColumns] = useState<PendingColumn[]>([]);
   const [newColumnName, setNewColumnName] = useState("");
   const [newColumnType, setNewColumnType] = useState<TableColumnType>("text");
+  const [newColumnTargetTableId, setNewColumnTargetTableId] = useState("");
+  const [newColumnDisplayField, setNewColumnDisplayField] = useState(
+    DEFAULT_LINK_DISPLAY_FIELD,
+  );
   const [columnError, setColumnError] = useState("");
   const [submitError, setSubmitError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
+  const tableNameById = new Map(
+    availableTables.map((table) => [table.id, table.name]),
+  );
 
   function openModal() {
     setIsOpen(true);
@@ -50,6 +67,8 @@ export default function CreateTableModal({
     setPendingColumns([]);
     setNewColumnName("");
     setNewColumnType("text");
+    setNewColumnTargetTableId("");
+    setNewColumnDisplayField(DEFAULT_LINK_DISPLAY_FIELD);
     setColumnError("");
     setSubmitError("");
     setIsSubmitting(false);
@@ -77,18 +96,62 @@ export default function CreateTableModal({
       return;
     }
 
+    if (newColumnType === "link" && !newColumnTargetTableId) {
+      setColumnError("Please choose a target table for link columns.");
+      return;
+    }
+
+    if (newColumnType === "link" && !newColumnDisplayField) {
+      setColumnError("Please choose a display field for link columns.");
+      return;
+    }
+
     setPendingColumns((currentColumns) => [
       ...currentColumns,
       {
         id: createPendingColumnId(),
         name: normalizedName,
         type: newColumnType,
+        ...(newColumnType === "link"
+          ? {
+              targetTableId: newColumnTargetTableId,
+              displayField: newColumnDisplayField,
+            }
+          : {}),
       },
     ]);
 
     setNewColumnName("");
     setNewColumnType("text");
+    setNewColumnTargetTableId("");
+    setNewColumnDisplayField(DEFAULT_LINK_DISPLAY_FIELD);
     setColumnError("");
+  }
+
+  function getTargetFieldOptions(targetTableId: string) {
+    if (!targetTableId) {
+      return [DEFAULT_LINK_DISPLAY_FIELD];
+    }
+
+    if (targetTableId === SELF_LINK_TARGET_TABLE) {
+      const selfFieldNames = [
+        DEFAULT_LINK_DISPLAY_FIELD,
+        ...pendingColumns.map((column) => column.name),
+      ];
+
+      return Array.from(new Set(selfFieldNames));
+    }
+
+    const targetTable = availableTables.find(
+      (table) => table.id === targetTableId,
+    );
+    const targetFieldNames = targetTable?.columns.map(
+      (column) => column.name,
+    ) ?? [DEFAULT_LINK_DISPLAY_FIELD];
+
+    return targetFieldNames.length > 0
+      ? targetFieldNames
+      : [DEFAULT_LINK_DISPLAY_FIELD];
   }
 
   function removeColumn(columnId: string) {
@@ -184,9 +247,15 @@ export default function CreateTableModal({
                     <select
                       id="columnType"
                       value={newColumnType}
-                      onChange={(event) =>
-                        setNewColumnType(event.target.value as TableColumnType)
-                      }
+                      onChange={(event) => {
+                        const nextType = event.target.value as TableColumnType;
+                        setNewColumnType(nextType);
+
+                        if (nextType !== "link") {
+                          setNewColumnTargetTableId("");
+                          setNewColumnDisplayField(DEFAULT_LINK_DISPLAY_FIELD);
+                        }
+                      }}
                       className="border rounded px-2 py-1"
                     >
                       {TABLE_COLUMN_TYPES.map((columnType) => (
@@ -196,6 +265,67 @@ export default function CreateTableModal({
                       ))}
                     </select>
                   </div>
+
+                  {newColumnType === "link" ? (
+                    <div className="flex min-w-52 flex-1 flex-col gap-1">
+                      <label htmlFor="columnTargetTable" className="text-sm">
+                        Link To Table
+                      </label>
+                      <select
+                        id="columnTargetTable"
+                        value={newColumnTargetTableId}
+                        onChange={(event) => {
+                          const nextTargetTableId = event.target.value;
+                          setNewColumnTargetTableId(nextTargetTableId);
+
+                          const nextOptions =
+                            getTargetFieldOptions(nextTargetTableId);
+                          if (!nextOptions.includes(newColumnDisplayField)) {
+                            setNewColumnDisplayField(
+                              nextOptions.includes(DEFAULT_LINK_DISPLAY_FIELD)
+                                ? DEFAULT_LINK_DISPLAY_FIELD
+                                : nextOptions[0],
+                            );
+                          }
+                        }}
+                        className="border rounded px-2 py-1"
+                      >
+                        <option value="">Select table</option>
+                        {availableTables.map((table) => (
+                          <option key={table.id} value={table.id}>
+                            {table.name}
+                          </option>
+                        ))}
+                        <option value={SELF_LINK_TARGET_TABLE}>
+                          This table
+                        </option>
+                      </select>
+                    </div>
+                  ) : null}
+
+                  {newColumnType === "link" ? (
+                    <div className="flex min-w-52 flex-1 flex-col gap-1">
+                      <label htmlFor="columnDisplayField" className="text-sm">
+                        Display Field
+                      </label>
+                      <select
+                        id="columnDisplayField"
+                        value={newColumnDisplayField}
+                        onChange={(event) =>
+                          setNewColumnDisplayField(event.target.value)
+                        }
+                        className="border rounded px-2 py-1"
+                      >
+                        {getTargetFieldOptions(newColumnTargetTableId).map(
+                          (fieldName) => (
+                            <option key={fieldName} value={fieldName}>
+                              {fieldName}
+                            </option>
+                          ),
+                        )}
+                      </select>
+                    </div>
+                  ) : null}
 
                   <button
                     type="button"
@@ -228,6 +358,17 @@ export default function CreateTableModal({
                         <span>
                           {column.name}{" "}
                           <span className="text-gray-500">({column.type})</span>
+                          {column.type === "link" && column.targetTableId ? (
+                            <span className="text-gray-500">
+                              {" "}
+                              →{" "}
+                              {tableNameById.get(column.targetTableId) ??
+                                "This table"}
+                              {column.displayField
+                                ? ` [${column.displayField}]`
+                                : ""}
+                            </span>
+                          ) : null}
                         </span>
                         <button
                           type="button"
@@ -246,6 +387,16 @@ export default function CreateTableModal({
                           type="hidden"
                           name="columnType"
                           value={column.type}
+                        />
+                        <input
+                          type="hidden"
+                          name="columnTargetTableId"
+                          value={column.targetTableId ?? ""}
+                        />
+                        <input
+                          type="hidden"
+                          name="columnDisplayField"
+                          value={column.displayField ?? ""}
                         />
                       </li>
                     ))}

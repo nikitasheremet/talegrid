@@ -11,10 +11,16 @@ import CreateTableModal from "./createTableModal";
 export default function TablesList({
   universe,
   initialTables,
+  availableTables,
   addTable,
 }: {
   universe: string;
   initialTables: TableListItem[];
+  availableTables: Array<{
+    id: string;
+    name: string;
+    columns: Array<{ name: string; type: string }>;
+  }>;
   addTable: (formData: FormData) => Promise<void>;
 }) {
   const [tables, addOptimisticTable] = useOptimisticTables(initialTables);
@@ -41,7 +47,10 @@ export default function TablesList({
         })}
       </ul>
 
-      <CreateTableModal onCreate={handleCreateTable} />
+      <CreateTableModal
+        onCreate={handleCreateTable}
+        availableTables={availableTables}
+      />
     </>
   );
 }

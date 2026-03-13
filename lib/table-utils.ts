@@ -3,7 +3,10 @@ import type { IColumn } from "@/lib/models";
 export const DEFAULT_TABLE_COLUMNS: IColumn[] = [
   { name: "Name", type: "text" },
 ];
-export const TABLE_COLUMN_TYPES = ["text", "longtext"] as const;
+export const TABLE_COLUMN_TYPES = ["text", "longtext", "link"] as const;
+export const LINK_COLUMN_TYPE = "link";
+export const SELF_LINK_TARGET_TABLE = "__self__";
+export const DEFAULT_LINK_DISPLAY_FIELD = "Name";
 
 export type TableColumnType = (typeof TABLE_COLUMN_TYPES)[number];
 
@@ -21,9 +24,37 @@ function isTableColumnType(value: string): value is TableColumnType {
   return TABLE_COLUMN_TYPES.includes(value as TableColumnType);
 }
 
+function getTargetTableId(
+  columnType: TableColumnType,
+  targetTableValue: FormDataEntryValue | undefined,
+): string | undefined {
+  if (columnType !== LINK_COLUMN_TYPE) return undefined;
+  if (typeof targetTableValue !== "string") return undefined;
+
+  const normalizedTargetTableId = targetTableValue.trim();
+  return normalizedTargetTableId.length > 0
+    ? normalizedTargetTableId
+    : undefined;
+}
+
+function getDisplayField(
+  columnType: TableColumnType,
+  displayFieldValue: FormDataEntryValue | undefined,
+): string | undefined {
+  if (columnType !== LINK_COLUMN_TYPE) return undefined;
+  if (typeof displayFieldValue !== "string") {
+    return DEFAULT_LINK_DISPLAY_FIELD;
+  }
+
+  const normalizedDisplayField = normalizeColumnName(displayFieldValue);
+  return normalizedDisplayField || DEFAULT_LINK_DISPLAY_FIELD;
+}
+
 export function parseTableColumnsFromFormData(formData: FormData): IColumn[] {
   const columnNames = formData.getAll("columnName");
   const columnTypes = formData.getAll("columnType");
+  const columnTargetTableIds = formData.getAll("columnTargetTableId");
+  const columnDisplayFields = formData.getAll("columnDisplayField");
 
   const columns: IColumn[] = [];
   for (let index = 0; index < columnNames.length; index += 1) {
@@ -36,9 +67,24 @@ export function parseTableColumnsFromFormData(formData: FormData): IColumn[] {
       continue;
     }
 
+    const targetTableId = getTargetTableId(
+      normalizedType,
+      columnTargetTableIds[index],
+    );
+    const displayField = getDisplayField(
+      normalizedType,
+      columnDisplayFields[index],
+    );
+
+    if (normalizedType === LINK_COLUMN_TYPE && !targetTableId) {
+      continue;
+    }
+
     columns.push({
       name,
       type: normalizedType,
+      ...(targetTableId ? { targetTableId } : {}),
+      ...(displayField ? { displayField } : {}),
     });
   }
 

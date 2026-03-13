@@ -4,35 +4,53 @@ import TableCell from "./tableCell";
 export default function TableRow({
   id,
   attributes,
+  columns,
+  linkOptionsByColumn,
   updateCell,
 }: {
   id: string;
   attributes: {
     [key: string]: {
       type: string;
-      value: any;
+      value: string | string[];
     };
   };
-  updateCell: (rowId: string, cellId: string, value: string) => void;
+  columns: Array<{
+    key: string;
+    name: string;
+    type: string;
+    targetTableId?: string;
+    displayField?: string;
+  }>;
+  linkOptionsByColumn: Record<string, Array<{ id: string; label: string }>>;
+  updateCell: (rowId: string, cellId: string, value: string | string[]) => void;
 }) {
   const rowValues = useMemo(() => {
-    const attributesEntries = Object.entries(attributes);
+    return columns.map((column) => {
+      const attribute = attributes[column.name];
 
-    return attributesEntries.map((attribute) => {
       return {
-        id: attribute[0],
-        value: attribute[1].value,
+        id: column.name,
+        type: column.type,
+        value: attribute?.value ?? (column.type === "link" ? [] : ""),
       };
     });
-  }, [attributes]);
+  }, [attributes, columns]);
+
+  const cellKeySuffix = useMemo(() => id, [id]);
+
+  function getCellValueKey(value: string | string[]) {
+    return Array.isArray(value) ? value.join("|") : value;
+  }
 
   return (
     <tr>
       {rowValues.map((value) => (
         <TableCell
-          key={value.id + value.value.slice(10)}
+          key={`${value.id}-${cellKeySuffix}-${getCellValueKey(value.value)}`}
           rowId={id}
           cellValue={value}
+          linkOptions={linkOptionsByColumn[value.id] ?? []}
           updateCell={updateCell}
         />
       ))}
