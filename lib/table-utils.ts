@@ -17,6 +17,13 @@ export function normalizeTableName(value: FormDataEntryValue | null): string {
   return value.trim();
 }
 
+export function normalizeUniverseName(
+  value: FormDataEntryValue | null,
+): string {
+  if (typeof value !== "string") return "";
+  return value.trim();
+}
+
 export function normalizeColumnName(value: FormDataEntryValue | null): string {
   if (typeof value !== "string") return "";
   return value.trim();

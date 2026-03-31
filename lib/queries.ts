@@ -12,6 +12,10 @@ import {
 const EMPTY_LINK_VALUES: string[] = [];
 const ATTRIBUTE_PATH_PREFIX = "attributes.";
 
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function normalizeId(value: string | Types.ObjectId): string {
   return value instanceof Types.ObjectId ? value.toString() : value;
 }
@@ -374,6 +378,34 @@ export async function createUniverse(name: string): Promise<IUniverse> {
   await connectDB();
   const universe = new Universe({ name });
   return universe.save();
+}
+
+export async function createUniverseIfNotExists(
+  name: string,
+): Promise<{ created: boolean }> {
+  await connectDB();
+
+  const normalizedName = name.trim();
+  if (!normalizedName) {
+    return { created: false };
+  }
+
+  const existingUniverse = await Universe.findOne({
+    name: {
+      $regex: `^${escapeRegex(normalizedName)}$`,
+      $options: "i",
+    },
+  })
+    .select("_id")
+    .lean()
+    .exec();
+
+  if (existingUniverse) {
+    return { created: false };
+  }
+
+  await createUniverse(normalizedName);
+  return { created: true };
 }
 
 // Create a new table
