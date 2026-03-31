@@ -7,6 +7,8 @@ export const TABLE_COLUMN_TYPES = ["text", "longtext", "link"] as const;
 export const LINK_COLUMN_TYPE = "link";
 export const SELF_LINK_TARGET_TABLE = "__self__";
 export const DEFAULT_LINK_DISPLAY_FIELD = "Name";
+export const MINIMUM_REMAINING_COLUMNS = 1;
+export const DELETE_COLUMN_FORM_FIELD = "selectedColumnName";
 
 export type TableColumnType = (typeof TABLE_COLUMN_TYPES)[number];
 
@@ -18,6 +20,26 @@ export function normalizeTableName(value: FormDataEntryValue | null): string {
 export function normalizeColumnName(value: FormDataEntryValue | null): string {
   if (typeof value !== "string") return "";
   return value.trim();
+}
+
+export function parseSelectedColumnNamesFromFormData(
+  formData: FormData,
+  fieldName = DELETE_COLUMN_FORM_FIELD,
+): string[] {
+  const selectedNames = formData.getAll(fieldName);
+  const uniqueColumnNames = new Map<string, string>();
+
+  for (const value of selectedNames) {
+    const normalizedName = normalizeColumnName(value);
+    if (!normalizedName) continue;
+
+    const normalizedKey = normalizedName.toLowerCase();
+    if (!uniqueColumnNames.has(normalizedKey)) {
+      uniqueColumnNames.set(normalizedKey, normalizedName);
+    }
+  }
+
+  return Array.from(uniqueColumnNames.values());
 }
 
 function isTableColumnType(value: string): value is TableColumnType {

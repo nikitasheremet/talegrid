@@ -5,10 +5,12 @@ import { Types } from "mongoose";
 import {
   DEFAULT_LINK_DISPLAY_FIELD,
   LINK_COLUMN_TYPE,
+  MINIMUM_REMAINING_COLUMNS,
   SELF_LINK_TARGET_TABLE,
 } from "./table-utils";
 
 const EMPTY_LINK_VALUES: string[] = [];
+const ATTRIBUTE_PATH_PREFIX = "attributes.";
 
 function normalizeId(value: string | Types.ObjectId): string {
   return value instanceof Types.ObjectId ? value.toString() : value;
@@ -38,6 +40,32 @@ function getNormalizedLinkValues(value: unknown): string[] {
   return value
     .map((item) => (typeof item === "string" ? item.trim() : ""))
     .filter((item) => item.length > 0);
+}
+
+function getUniqueNormalizedColumnNames(columnNames: string[]): string[] {
+  const normalizedByKey = new Map<string, string>();
+
+  for (const columnName of columnNames) {
+    const normalizedColumnName = columnName.trim();
+    if (!normalizedColumnName) continue;
+
+    const normalizedKey = normalizedColumnName.toLowerCase();
+    if (!normalizedByKey.has(normalizedKey)) {
+      normalizedByKey.set(normalizedKey, normalizedColumnName);
+    }
+  }
+
+  return Array.from(normalizedByKey.values());
+}
+
+function createAttributeUnsetPayload(columnNames: string[]): Record<string, 1> {
+  const unsetPayload: Record<string, 1> = {};
+
+  for (const columnName of columnNames) {
+    unsetPayload[`${ATTRIBUTE_PATH_PREFIX}${columnName}`] = 1;
+  }
+
+  return unsetPayload;
 }
 
 async function normalizeColumnsForPersistence(
@@ -446,6 +474,59 @@ export async function addColumnToTable(
     ).exec();
   }
 
+  return updatedTable.toObject();
+}
+
+export async function deleteColumnsFromTable(
+  tableId: string | Types.ObjectId,
+  columnNames: string[],
+): Promise<ITable | null> {
+  await connectDB();
+
+  const table = await Table.findById(tableId).exec();
+  if (!table) return null;
+
+  const normalizedColumnNames = getUniqueNormalizedColumnNames(columnNames);
+  if (normalizedColumnNames.length === 0) {
+    return table.toObject();
+  }
+
+  const selectedColumnNameSet = new Set(
+    normalizedColumnNames.map((columnName) => columnName.toLowerCase()),
+  );
+
+  const columnsToDelete = table.columns
+    .filter((column: { name: string }) =>
+      selectedColumnNameSet.has(column.name.toLowerCase()),
+    )
+    .map((column: { name: string }) => column.name);
+
+  if (columnsToDelete.length === 0) {
+    return table.toObject();
+  }
+
+  const remainingColumns = table.columns.filter(
+    (column: { name: string }) =>
+      !selectedColumnNameSet.has(column.name.toLowerCase()),
+  );
+
+  if (remainingColumns.length < MINIMUM_REMAINING_COLUMNS) {
+    throw new Error("A table must keep at least one column.");
+  }
+
+  table.columns = remainingColumns;
+  const updatedTable = await table.save();
+
+  const unsetPayload = createAttributeUnsetPayload(columnsToDelete);
+  if (Object.keys(unsetPayload).length > 0) {
+    await TableRow.updateMany(
+      { tableId: table._id },
+      { $unset: unsetPayload },
+    ).exec();
+  }
+
+  // Intentionally non-blocking for external link displayField references.
+  // If another table points to a removed display field, link labels may fallback to row id.
   return updatedTable.toObject();
 }
 

@@ -8,13 +8,17 @@ import {
   updateTableRow,
   createTableRow,
   addColumnToTable,
+  deleteColumnsFromTable,
   getTablesByUniverseName,
 } from "@/lib/queries";
 import type { IAttributeValue } from "@/lib/models";
 import {
+  DELETE_COLUMN_FORM_FIELD,
   DEFAULT_LINK_DISPLAY_FIELD,
   LINK_COLUMN_TYPE,
+  MINIMUM_REMAINING_COLUMNS,
   normalizeColumnName,
+  parseSelectedColumnNamesFromFormData,
   TABLE_COLUMN_TYPES,
 } from "@/lib/table-utils";
 
@@ -171,12 +175,40 @@ export default async function TableView({
     revalidatePath(`/universe/${universe}/${tableName}`, "page");
   }
 
+  async function deleteColumns(formData: FormData) {
+    "use server";
+
+    const selectedColumnNames = parseSelectedColumnNamesFromFormData(
+      formData,
+      DELETE_COLUMN_FORM_FIELD,
+    );
+
+    if (selectedColumnNames.length === 0) {
+      throw new Error("Please select at least one column to delete.");
+    }
+
+    const selectedColumnNameSet = new Set(
+      selectedColumnNames.map((columnName) => columnName.toLowerCase()),
+    );
+    const remainingColumnsCount = columns.filter(
+      (column) => !selectedColumnNameSet.has(column.name.toLowerCase()),
+    ).length;
+
+    if (remainingColumnsCount < MINIMUM_REMAINING_COLUMNS) {
+      throw new Error("You must keep at least one column in the table.");
+    }
+
+    await deleteColumnsFromTable(tableId, selectedColumnNames);
+    revalidatePath(`/universe/${universe}/${tableName}`, "page");
+  }
+
   return (
     <div className="p-5 flex flex-col gap-5">
       <div className="flex items-center justify-between">
         <h1 className="text-xl">{tableName}</h1>
         <TableSettingsMenu
           onAddColumn={addColumn}
+          onDeleteColumns={deleteColumns}
           availableTables={universeTables.map((table) => ({
             id: table._id.toString(),
             name: table.name,
@@ -184,6 +216,10 @@ export default async function TableView({
               name: column.name,
               type: column.type,
             })),
+          }))}
+          columns={tableColumns.map((column) => ({
+            name: column.name,
+            type: column.type,
           }))}
         />
       </div>
