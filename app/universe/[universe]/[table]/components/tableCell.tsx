@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { LINK_COLUMN_TYPE } from "@/lib/table-utils";
+import { LINK_COLUMN_TYPE, NUMBER_COLUMN_TYPE } from "@/lib/table-utils";
 
 const DEBOUNCE_TIMEOUT_MS = 1000;
 const LINK_LABEL_PREVIEW_LIMIT = 3;
@@ -15,7 +15,7 @@ export default function TablCell({
 }: {
   rowId: string;
   cellValue: {
-    value: string | string[];
+    value: string | string[] | number | null;
     id: string;
     type: string;
   };
@@ -23,11 +23,15 @@ export default function TablCell({
   updateCell: (
     rowId: string,
     attributeName: string,
-    value: string | string[],
-  ) => void;
+    value: string | string[] | number | null,
+  ) => Promise<{ error?: string }>;
 }) {
   const [value, setCellValue] = useState(
-    typeof cellValue.value === "string" ? cellValue.value : "",
+    typeof cellValue.value === "number"
+      ? `${cellValue.value}`
+      : typeof cellValue.value === "string"
+        ? cellValue.value
+        : "",
   );
   const [isPickerOpen, setIsPickerOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -44,7 +48,7 @@ export default function TablCell({
 
     const nextValue = event.target.value;
     debounceTimer = setTimeout(() => {
-      updateCell(currentRowId, cellId, nextValue);
+      void updateCell(currentRowId, cellId, nextValue);
     }, DEBOUNCE_TIMEOUT_MS);
 
     setCellValue(nextValue);
@@ -61,7 +65,7 @@ export default function TablCell({
   }
 
   function saveSelectedLinks() {
-    updateCell(rowId, cellValue.id, selectedIds);
+    void updateCell(rowId, cellValue.id, selectedIds);
     setIsPickerOpen(false);
   }
 
@@ -85,6 +89,8 @@ export default function TablCell({
     return (
       <td>
         <input
+          type={cellValue.type === NUMBER_COLUMN_TYPE ? "number" : "text"}
+          step={cellValue.type === NUMBER_COLUMN_TYPE ? "any" : undefined}
           value={value}
           onChange={(event) => updateValue(rowId, cellValue.id, event)}
           suppressHydrationWarning={true}

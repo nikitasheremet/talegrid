@@ -6,6 +6,8 @@ import {
   DEFAULT_LINK_DISPLAY_FIELD,
   LINK_COLUMN_TYPE,
   MINIMUM_REMAINING_COLUMNS,
+  NUMBER_COLUMN_TYPE,
+  parseStrictNumberValue,
   SELF_LINK_TARGET_TABLE,
 } from "./table-utils";
 
@@ -29,6 +31,13 @@ function createDefaultAttribute(type: string): IAttributeValue {
     return {
       type,
       value: [...EMPTY_LINK_VALUES],
+    };
+  }
+
+  if (type === NUMBER_COLUMN_TYPE) {
+    return {
+      type,
+      value: null,
     };
   }
 
@@ -229,6 +238,35 @@ async function validateLinkCellValues(
     normalizedAttributes[linkColumn.name] = {
       type: LINK_COLUMN_TYPE,
       value: filteredRowIds,
+    };
+  }
+
+  return normalizedAttributes;
+}
+
+function validateNumberCellValues(
+  table: ITable,
+  attributes: Record<string, IAttributeValue>,
+): Record<string, IAttributeValue> {
+  const normalizedAttributes = { ...attributes };
+  const numberColumns = table.columns.filter(
+    (column) => column.type === NUMBER_COLUMN_TYPE,
+  );
+
+  for (const numberColumn of numberColumns) {
+    const cell = normalizedAttributes[numberColumn.name] ?? {
+      type: NUMBER_COLUMN_TYPE,
+      value: null,
+    };
+
+    const parsedValue = parseStrictNumberValue(cell.value);
+    if (!parsedValue.ok) {
+      throw new Error(`Invalid number value for column \"${numberColumn.name}\".`);
+    }
+
+    normalizedAttributes[numberColumn.name] = {
+      type: NUMBER_COLUMN_TYPE,
+      value: parsedValue.value,
     };
   }
 
@@ -574,7 +612,14 @@ export async function createTableRow(
     throw new Error("Table not found");
   }
 
-  const validatedAttributes = await validateLinkCellValues(table, attributes);
+  const linkValidatedAttributes = await validateLinkCellValues(
+    table,
+    attributes,
+  );
+  const validatedAttributes = validateNumberCellValues(
+    table,
+    linkValidatedAttributes,
+  );
 
   const row = new TableRow({
     tableId,
@@ -596,7 +641,14 @@ export async function updateTableRow(
   const table = await Table.findById(existingRow.tableId).lean().exec();
   if (!table) return null;
 
-  const validatedAttributes = await validateLinkCellValues(table, attributes);
+  const linkValidatedAttributes = await validateLinkCellValues(
+    table,
+    attributes,
+  );
+  const validatedAttributes = validateNumberCellValues(
+    table,
+    linkValidatedAttributes,
+  );
 
   return TableRow.findByIdAndUpdate(
     rowId,

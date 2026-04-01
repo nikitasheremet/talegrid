@@ -17,6 +17,7 @@ import {
   DEFAULT_LINK_DISPLAY_FIELD,
   LINK_COLUMN_TYPE,
   MINIMUM_REMAINING_COLUMNS,
+  NUMBER_COLUMN_TYPE,
   normalizeColumnName,
   parseSelectedColumnNamesFromFormData,
   TABLE_COLUMN_TYPES,
@@ -31,13 +32,19 @@ function getRowLabel(
   const preferredValue =
     typeof preferredAttribute?.value === "string"
       ? preferredAttribute.value.trim()
+      : typeof preferredAttribute?.value === "number"
+        ? `${preferredAttribute.value}`
       : "";
 
   if (preferredValue) return preferredValue;
 
   const nameAttribute = attributes?.[DEFAULT_LINK_DISPLAY_FIELD];
   const nameValue =
-    typeof nameAttribute?.value === "string" ? nameAttribute.value.trim() : "";
+    typeof nameAttribute?.value === "string"
+      ? nameAttribute.value.trim()
+      : typeof nameAttribute?.value === "number"
+        ? `${nameAttribute.value}`
+        : "";
 
   if (nameValue) return nameValue;
   return rowId;
@@ -108,19 +115,35 @@ export default async function TableView({
   async function updateCell(
     rowId: string,
     rowAttribute: string,
-    value: string | string[],
-  ) {
+    value: string | string[] | number | null,
+  ): Promise<{ error?: string }> {
     "use server";
+
     const row = rows.find((r) => r._id.toString() === rowId);
-    if (!row) return;
+    if (!row) return { error: "Row not found." };
 
     const updatedAttributes = { ...row.attributes };
     if (updatedAttributes[rowAttribute]) {
       updatedAttributes[rowAttribute].value = value;
     }
 
-    await updateTableRow(rowId, updatedAttributes);
-    revalidatePath(`/universe/${universe}/${tableName}`, "page");
+    try {
+      await updateTableRow(rowId, updatedAttributes);
+      revalidatePath(`/universe/${universe}/${tableName}`, "page");
+      return {};
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        error.message.startsWith("Invalid number value")
+      ) {
+        return {
+          error:
+            "Could not save: please enter a valid number using plain digits and an optional decimal point.",
+        };
+      }
+
+      return { error: "Could not save this cell. Please try again." };
+    }
   }
 
   async function addColumn(formData: FormData) {
@@ -167,7 +190,12 @@ export default async function TableView({
     columns.forEach((col) => {
       newAttributes[col.name] = {
         type: col.type,
-        value: col.type === LINK_COLUMN_TYPE ? [] : "",
+        value:
+          col.type === LINK_COLUMN_TYPE
+            ? []
+            : col.type === NUMBER_COLUMN_TYPE
+              ? null
+              : "",
       };
     });
 

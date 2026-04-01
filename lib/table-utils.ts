@@ -3,14 +3,17 @@ import type { IColumn } from "@/lib/models";
 export const DEFAULT_TABLE_COLUMNS: IColumn[] = [
   { name: "Name", type: "text" },
 ];
-export const TABLE_COLUMN_TYPES = ["text", "longtext", "link"] as const;
+export const TABLE_COLUMN_TYPES = ["text", "longtext", "link", "number"] as const;
 export const LINK_COLUMN_TYPE = "link";
+export const NUMBER_COLUMN_TYPE = "number";
 export const SELF_LINK_TARGET_TABLE = "__self__";
 export const DEFAULT_LINK_DISPLAY_FIELD = "Name";
 export const MINIMUM_REMAINING_COLUMNS = 1;
 export const DELETE_COLUMN_FORM_FIELD = "selectedColumnName";
 
 export type TableColumnType = (typeof TABLE_COLUMN_TYPES)[number];
+
+const STRICT_NUMBER_PATTERN = /^-?\d+(\.\d+)?$/;
 
 export function normalizeTableName(value: FormDataEntryValue | null): string {
   if (typeof value !== "string") return "";
@@ -27,6 +30,39 @@ export function normalizeUniverseName(
 export function normalizeColumnName(value: FormDataEntryValue | null): string {
   if (typeof value !== "string") return "";
   return value.trim();
+}
+
+export function parseStrictNumberValue(
+  value: unknown,
+): { ok: true; value: number | null } | { ok: false } {
+  if (value === null || typeof value === "undefined") {
+    return { ok: true, value: null };
+  }
+
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) return { ok: false };
+    return { ok: true, value };
+  }
+
+  if (typeof value !== "string") {
+    return { ok: false };
+  }
+
+  const normalizedValue = value.trim();
+  if (!normalizedValue) {
+    return { ok: true, value: null };
+  }
+
+  if (!STRICT_NUMBER_PATTERN.test(normalizedValue)) {
+    return { ok: false };
+  }
+
+  const parsedValue = Number(normalizedValue);
+  if (!Number.isFinite(parsedValue)) {
+    return { ok: false };
+  }
+
+  return { ok: true, value: parsedValue };
 }
 
 export function parseSelectedColumnNamesFromFormData(
