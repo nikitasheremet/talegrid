@@ -34,7 +34,7 @@ function getRowLabel(
       ? preferredAttribute.value.trim()
       : typeof preferredAttribute?.value === "number"
         ? `${preferredAttribute.value}`
-      : "";
+        : "";
 
   if (preferredValue) return preferredValue;
 

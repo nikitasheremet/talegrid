@@ -3,7 +3,12 @@ import type { IColumn } from "@/lib/models";
 export const DEFAULT_TABLE_COLUMNS: IColumn[] = [
   { name: "Name", type: "text" },
 ];
-export const TABLE_COLUMN_TYPES = ["text", "longtext", "link", "number"] as const;
+export const TABLE_COLUMN_TYPES = [
+  "text",
+  "longtext",
+  "link",
+  "number",
+] as const;
 export const LINK_COLUMN_TYPE = "link";
 export const NUMBER_COLUMN_TYPE = "number";
 export const SELF_LINK_TARGET_TABLE = "__self__";

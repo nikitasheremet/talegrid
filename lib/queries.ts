@@ -261,7 +261,9 @@ function validateNumberCellValues(
 
     const parsedValue = parseStrictNumberValue(cell.value);
     if (!parsedValue.ok) {
-      throw new Error(`Invalid number value for column \"${numberColumn.name}\".`);
+      throw new Error(
+        `Invalid number value for column \"${numberColumn.name}\".`,
+      );
     }
 
     normalizedAttributes[numberColumn.name] = {
