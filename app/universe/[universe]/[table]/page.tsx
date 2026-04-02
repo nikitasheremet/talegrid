@@ -9,6 +9,7 @@ import {
   createTableRow,
   addColumnToTable,
   deleteColumnsFromTable,
+  updateColumnInTable,
   getTablesByUniverseName,
 } from "@/lib/queries";
 import type { IAttributeValue } from "@/lib/models";
@@ -252,6 +253,36 @@ export default async function TableView({
     revalidatePath(`/universe/${universe}/${tableName}`, "page");
   }
 
+  async function editColumn(formData: FormData) {
+    "use server";
+
+    const oldColumnName = normalizeColumnName(formData.get("oldColumnName"));
+    const newColumnName = normalizeColumnName(formData.get("newColumnName"));
+    const currentColumn = columns.find(
+      (column) => column.name.toLowerCase() === oldColumnName.toLowerCase(),
+    );
+
+    if (!oldColumnName || !newColumnName || !currentColumn) {
+      throw new Error("Column name is required.");
+    }
+
+    const columnOptions =
+      currentColumn.type === MULTISELECT_COLUMN_TYPE
+        ? parseMultiselectOptionsFormValue(formData.get("columnOptions"))
+        : undefined;
+
+    if (currentColumn.type === MULTISELECT_COLUMN_TYPE && !columnOptions) {
+      throw new Error("Please add at least one allowed value.");
+    }
+
+    await updateColumnInTable(tableId, {
+      oldColumnName,
+      newColumnName,
+      options: columnOptions,
+    });
+    revalidatePath(`/universe/${universe}/${tableName}`, "page");
+  }
+
   return (
     <div className="p-5 flex flex-col gap-5">
       <div className="flex items-center justify-between">
@@ -280,6 +311,7 @@ export default async function TableView({
           attributes: row.attributes,
         }))}
         updateCell={updateCell}
+        onEditColumn={editColumn}
         linkOptionsByColumn={linkOptionsByColumn}
       />
       <Button click={addNewEmptyRow} buttonText="Add New Row" />

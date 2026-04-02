@@ -1,12 +1,14 @@
 "use client";
 
 import { useState } from "react";
+import EditColumnModal from "./editColumnModal";
 import TableRow from "./tableRow";
 
 export function Table({
   rows,
   columns,
   updateCell,
+  onEditColumn,
   linkOptionsByColumn,
 }: {
   rows: {
@@ -31,9 +33,14 @@ export function Table({
     cellId: string,
     value: string | string[] | number | null,
   ) => Promise<{ error?: string }>;
+  onEditColumn: (formData: FormData) => Promise<void>;
   linkOptionsByColumn: Record<string, Array<{ id: string; label: string }>>;
 }) {
   const [saveError, setSaveError] = useState("");
+  const [editingColumnName, setEditingColumnName] = useState("");
+  const editingColumn = columns.find(
+    (column) => column.name === editingColumnName,
+  );
 
   async function handleUpdateCell(
     rowId: string,
@@ -66,8 +73,19 @@ export function Table({
           <tr className="border-b">
             {columns.map((column) => {
               return (
-                <th className="p-2 w-30" key={column.key}>
-                  {column.name}
+                <th className="group p-2 w-30" key={column.key}>
+                  <div className="flex items-center gap-2">
+                    <span>{column.name}</span>
+                    <button
+                      type="button"
+                      className="opacity-0 text-sm transition-opacity hover:text-slate-600 group-hover:opacity-100 group-focus-within:opacity-100"
+                      onClick={() => setEditingColumnName(column.name)}
+                      aria-label={`Edit ${column.name} column`}
+                      title="Edit column"
+                    >
+                      ✎
+                    </button>
+                  </div>
                 </th>
               );
             })}
@@ -86,6 +104,22 @@ export function Table({
           ))}
         </tbody>
       </table>
+
+      {editingColumn ? (
+        <EditColumnModal
+          onEditColumn={onEditColumn}
+          currentColumnName={editingColumn.name}
+          currentColumnType={editingColumn.type}
+          currentColumnOptions={editingColumn.options}
+          existingColumnNames={columns.map((column) => column.name)}
+          isOpen={Boolean(editingColumn)}
+          onOpenChange={(isOpen) => {
+            if (!isOpen) {
+              setEditingColumnName("");
+            }
+          }}
+        />
+      ) : null}
     </>
   );
 }

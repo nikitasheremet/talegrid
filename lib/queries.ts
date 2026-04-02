@@ -7,6 +7,7 @@ import {
   LINK_COLUMN_TYPE,
   MINIMUM_REMAINING_COLUMNS,
   MULTISELECT_COLUMN_TYPE,
+  normalizeColumnName,
   normalizeMultiselectOptionValues,
   NUMBER_COLUMN_TYPE,
   parseStrictNumberValue,
@@ -88,6 +89,18 @@ function createAttributeUnsetPayload(columnNames: string[]): Record<string, 1> {
   }
 
   return unsetPayload;
+}
+
+function areStringArraysEqual(left: string[], right: string[]): boolean {
+  if (left.length !== right.length) return false;
+
+  for (let index = 0; index < left.length; index += 1) {
+    if (left[index] !== right[index]) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 async function normalizeColumnsForPersistence(
@@ -689,6 +702,213 @@ export async function deleteColumnsFromTable(
   // Intentionally non-blocking for external link displayField references.
   // If another table points to a removed display field, link labels may fallback to row id.
   return updatedTable.toObject();
+}
+
+export async function renameColumnInTable(
+  tableId: string | Types.ObjectId,
+  oldColumnName: string,
+  newColumnName: string,
+): Promise<ITable | null> {
+  return updateColumnInTable(tableId, { oldColumnName, newColumnName });
+}
+
+export async function updateColumnInTable(
+  tableId: string | Types.ObjectId,
+  updates: {
+    oldColumnName: string;
+    newColumnName: string;
+    options?: string[];
+  },
+): Promise<ITable | null> {
+  await connectDB();
+
+  const table = await Table.findById(tableId).exec();
+  if (!table) return null;
+
+  const normalizedOldColumnName = normalizeColumnName(updates.oldColumnName);
+  const normalizedNewColumnName = normalizeColumnName(updates.newColumnName);
+
+  if (!normalizedOldColumnName || !normalizedNewColumnName) {
+    return table.toObject();
+  }
+
+  const targetColumnIndex = table.columns.findIndex(
+    (column: { name: string }) =>
+      column.name.toLowerCase() === normalizedOldColumnName.toLowerCase(),
+  );
+
+  if (targetColumnIndex < 0) {
+    return table.toObject();
+  }
+
+  const hasNameCollision = table.columns.some(
+    (column: { name: string }, index: number) =>
+      index !== targetColumnIndex &&
+      column.name.toLowerCase() === normalizedNewColumnName.toLowerCase(),
+  );
+
+  if (hasNameCollision) {
+    throw new Error("A column with this name already exists.");
+  }
+
+  const persistedOldColumnName = table.columns[targetColumnIndex].name;
+  const targetColumnType = table.columns[targetColumnIndex].type;
+  const isMultiselectColumn = targetColumnType === MULTISELECT_COLUMN_TYPE;
+  const shouldUpdateOptions =
+    isMultiselectColumn && Array.isArray(updates.options);
+
+  const normalizedNextOptions = shouldUpdateOptions
+    ? normalizeMultiselectOptionValues(
+        Array.isArray(updates.options) ? updates.options : [],
+      )
+    : undefined;
+  const normalizedNextOptionsArray = normalizedNextOptions ?? [];
+
+  if (shouldUpdateOptions && (normalizedNextOptions?.length ?? 0) === 0) {
+    throw new Error("Multiselect columns must include at least one option.");
+  }
+
+  const persistedCurrentOptions = isMultiselectColumn
+    ? normalizeMultiselectOptionValues(
+        Array.isArray(table.columns[targetColumnIndex].options)
+          ? table.columns[targetColumnIndex].options
+          : [],
+      )
+    : undefined;
+
+  const isNameUnchanged = persistedOldColumnName === normalizedNewColumnName;
+  const isOptionsUnchanged =
+    !shouldUpdateOptions ||
+    areStringArraysEqual(
+      normalizedNextOptionsArray,
+      persistedCurrentOptions ?? [],
+    );
+
+  if (isNameUnchanged && isOptionsUnchanged) {
+    return table.toObject();
+  }
+
+  table.columns[targetColumnIndex].name = normalizedNewColumnName;
+  if (shouldUpdateOptions) {
+    table.columns[targetColumnIndex].options = normalizedNextOptionsArray;
+  }
+  table.markModified("columns");
+  await table.save();
+
+  if (shouldUpdateOptions) {
+    await Table.updateOne(
+      { _id: table._id },
+      {
+        $set: {
+          "columns.$[column].options": normalizedNextOptionsArray,
+        },
+      },
+      {
+        arrayFilters: [
+          {
+            "column.name": normalizedNewColumnName,
+            "column.type": MULTISELECT_COLUMN_TYPE,
+          },
+        ],
+      },
+    ).exec();
+  }
+
+  const rows = await TableRow.find({ tableId: table._id }).exec();
+  for (const row of rows) {
+    const attributes = { ...(row.attributes ?? {}) };
+    let didChange = false;
+
+    if (
+      persistedOldColumnName !== normalizedNewColumnName &&
+      persistedOldColumnName in attributes
+    ) {
+      attributes[normalizedNewColumnName] = attributes[persistedOldColumnName];
+      delete attributes[persistedOldColumnName];
+      didChange = true;
+    }
+
+    if (shouldUpdateOptions) {
+      const existingCell = attributes[normalizedNewColumnName];
+      const existingRawValues = Array.isArray(existingCell?.value)
+        ? existingCell.value
+        : [];
+      const requestedValues = existingRawValues
+        .map((value: unknown) =>
+          typeof value === "string" ? value.trim() : "",
+        )
+        .filter((value: string) => value.length > 0);
+      const requestedValueSet = new Set<string>();
+
+      for (const requestedValue of requestedValues) {
+        if (normalizedNextOptionsArray.includes(requestedValue)) {
+          requestedValueSet.add(requestedValue);
+        }
+      }
+
+      const orderedValues = normalizedNextOptionsArray.filter((option) =>
+        requestedValueSet.has(option),
+      );
+
+      const previousOrderedValues = Array.isArray(existingCell?.value)
+        ? existingCell.value
+            .map((value: unknown) =>
+              typeof value === "string" ? value.trim() : "",
+            )
+            .filter((value: string) => value.length > 0)
+        : [];
+
+      if (!areStringArraysEqual(orderedValues, previousOrderedValues)) {
+        didChange = true;
+      }
+
+      attributes[normalizedNewColumnName] = {
+        type: MULTISELECT_COLUMN_TYPE,
+        value: orderedValues,
+      };
+    }
+
+    if (!didChange) {
+      continue;
+    }
+
+    await TableRow.findByIdAndUpdate(
+      row._id,
+      { attributes },
+      { new: false },
+    ).exec();
+  }
+
+  if (persistedOldColumnName !== normalizedNewColumnName) {
+    await Table.updateMany(
+      {
+        universeId: table.universeId,
+        columns: {
+          $elemMatch: {
+            type: LINK_COLUMN_TYPE,
+            targetTableId: table._id,
+            displayField: persistedOldColumnName,
+          },
+        },
+      },
+      {
+        $set: {
+          "columns.$[column].displayField": normalizedNewColumnName,
+        },
+      },
+      {
+        arrayFilters: [
+          {
+            "column.type": LINK_COLUMN_TYPE,
+            "column.targetTableId": table._id,
+            "column.displayField": persistedOldColumnName,
+          },
+        ],
+      },
+    ).exec();
+  }
+
+  return Table.findById(table._id).lean().exec();
 }
 
 // Create a new table row
