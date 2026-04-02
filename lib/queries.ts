@@ -472,26 +472,22 @@ export async function getUniverseByName(
 // Fetch all tables for a universe
 export async function getTablesByUniverseName(
   universeName: string,
-): Promise<(ITable & { universeId: IUniverse })[]> {
+): Promise<ITable[]> {
   const universe = await getUniverseDocumentByName(universeName);
   if (!universe) return [];
 
-  return Table.find({ universeId: universe._id })
-    .populate("universeId")
-    .lean()
-    .exec();
+  return Table.find({ universeId: universe._id }).lean().exec();
 }
 
 // Fetch a single table by name and universe name
 export async function getTableByNameAndUniverse(
   universeName: string,
   tableName: string,
-): Promise<(ITable & { universeId: IUniverse }) | null> {
+): Promise<ITable | null> {
   const universe = await getUniverseDocumentByName(universeName);
   if (!universe) return null;
 
   return Table.findOne({ name: tableName, universeId: universe._id })
-    .populate("universeId")
     .lean()
     .exec();
 }
