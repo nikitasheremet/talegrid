@@ -17,8 +17,10 @@ import {
   DEFAULT_LINK_DISPLAY_FIELD,
   LINK_COLUMN_TYPE,
   MINIMUM_REMAINING_COLUMNS,
+  MULTISELECT_COLUMN_TYPE,
   NUMBER_COLUMN_TYPE,
   normalizeColumnName,
+  parseMultiselectOptionsFormValue,
   parseSelectedColumnNamesFromFormData,
   TABLE_COLUMN_TYPES,
 } from "@/lib/table-utils";
@@ -76,6 +78,7 @@ export default async function TableView({
         ? col.targetTableId
         : col.targetTableId?.toString(),
     displayField: col.displayField,
+    options: col.options,
   }));
 
   const linkColumns = columns.filter(
@@ -142,6 +145,16 @@ export default async function TableView({
         };
       }
 
+      if (
+        error instanceof Error &&
+        error.message.startsWith("Invalid multiselect value")
+      ) {
+        return {
+          error:
+            "Could not save: one or more selected values are no longer allowed for this column.",
+        };
+      }
+
       return { error: "Could not save this cell. Please try again." };
     }
   }
@@ -153,6 +166,7 @@ export default async function TableView({
     const typeValue = formData.get("columnType");
     const targetTableValue = formData.get("columnTargetTableId");
     const displayFieldValue = formData.get("columnDisplayField");
+    const columnOptionsValue = formData.get("columnOptions");
 
     const columnType = typeof typeValue === "string" ? typeValue.trim() : "";
     if (!columnName || !TABLE_COLUMN_TYPES.includes(columnType as never)) {
@@ -168,8 +182,13 @@ export default async function TableView({
       displayFieldValue.trim().length > 0
         ? normalizeColumnName(displayFieldValue)
         : DEFAULT_LINK_DISPLAY_FIELD;
+    const options = parseMultiselectOptionsFormValue(columnOptionsValue);
 
     if (columnType === LINK_COLUMN_TYPE && !targetTableId) {
+      return;
+    }
+
+    if (columnType === MULTISELECT_COLUMN_TYPE && !options) {
       return;
     }
 
@@ -178,6 +197,7 @@ export default async function TableView({
       type: columnType,
       targetTableId,
       displayField,
+      options,
     });
 
     revalidatePath(`/universe/${universe}/${tableName}`, "page");
@@ -193,9 +213,11 @@ export default async function TableView({
         value:
           col.type === LINK_COLUMN_TYPE
             ? []
-            : col.type === NUMBER_COLUMN_TYPE
-              ? null
-              : "",
+            : col.type === MULTISELECT_COLUMN_TYPE
+              ? []
+              : col.type === NUMBER_COLUMN_TYPE
+                ? null
+                : "",
       };
     });
 

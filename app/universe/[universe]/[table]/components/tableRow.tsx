@@ -1,5 +1,9 @@
 import { useMemo } from "react";
-import { LINK_COLUMN_TYPE, NUMBER_COLUMN_TYPE } from "@/lib/table-utils";
+import {
+  LINK_COLUMN_TYPE,
+  MULTISELECT_COLUMN_TYPE,
+  NUMBER_COLUMN_TYPE,
+} from "@/lib/table-utils";
 import TableCell from "./tableCell";
 
 export default function TableRow({
@@ -22,6 +26,7 @@ export default function TableRow({
     type: string;
     targetTableId?: string;
     displayField?: string;
+    options?: string[];
   }>;
   linkOptionsByColumn: Record<string, Array<{ id: string; label: string }>>;
   updateCell: (
@@ -41,9 +46,11 @@ export default function TableRow({
           attribute?.value ??
           (column.type === LINK_COLUMN_TYPE
             ? []
-            : column.type === NUMBER_COLUMN_TYPE
-              ? null
-              : ""),
+            : column.type === MULTISELECT_COLUMN_TYPE
+              ? []
+              : column.type === NUMBER_COLUMN_TYPE
+                ? null
+                : ""),
       };
     });
   }, [attributes, columns]);
@@ -64,6 +71,9 @@ export default function TableRow({
           rowId={id}
           cellValue={value}
           linkOptions={linkOptionsByColumn[value.id] ?? []}
+          multiselectOptions={
+            columns.find((column) => column.name === value.id)?.options ?? []
+          }
           updateCell={updateCell}
         />
       ))}

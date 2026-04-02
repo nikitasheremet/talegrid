@@ -3,6 +3,8 @@
 import { useMemo, useState } from "react";
 import {
   DEFAULT_LINK_DISPLAY_FIELD,
+  MULTISELECT_COLUMN_TYPE,
+  parseMultiselectOptionsInput,
   TABLE_COLUMN_TYPES,
   type TableColumnType,
 } from "@/lib/table-utils";
@@ -35,6 +37,7 @@ export default function AddColumnModal({
   const [columnType, setColumnType] = useState<TableColumnType>("text");
   const [targetTableId, setTargetTableId] = useState("");
   const [displayField, setDisplayField] = useState(DEFAULT_LINK_DISPLAY_FIELD);
+  const [columnOptionsText, setColumnOptionsText] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
 
@@ -66,6 +69,7 @@ export default function AddColumnModal({
     setColumnType("text");
     setTargetTableId("");
     setDisplayField(DEFAULT_LINK_DISPLAY_FIELD);
+    setColumnOptionsText("");
     setError("");
     setIsSubmitting(false);
   }
@@ -87,6 +91,14 @@ export default function AddColumnModal({
     if (columnType === "link" && !displayField) {
       setError("Please select a display field for the linked rows.");
       return;
+    }
+
+    if (columnType === MULTISELECT_COLUMN_TYPE) {
+      const parsedOptions = parseMultiselectOptionsInput(columnOptionsText);
+      if (parsedOptions.length === 0) {
+        setError("Please add at least one allowed value for multiselect.");
+        return;
+      }
     }
 
     setError("");
@@ -156,6 +168,9 @@ export default function AddColumnModal({
                     if (event.target.value !== "link") {
                       setTargetTableId("");
                       setDisplayField(DEFAULT_LINK_DISPLAY_FIELD);
+                    }
+                    if (event.target.value !== MULTISELECT_COLUMN_TYPE) {
+                      setColumnOptionsText("");
                     }
                     if (error) setError("");
                   }}
@@ -241,6 +256,25 @@ export default function AddColumnModal({
                     </select>
                   </div>
                 </>
+              ) : columnType === MULTISELECT_COLUMN_TYPE ? (
+                <div className="flex flex-col gap-1">
+                  <label
+                    htmlFor="add-column-options"
+                    className="text-sm font-medium"
+                  >
+                    Allowed Values (one per line)
+                  </label>
+                  <textarea
+                    id="add-column-options"
+                    value={columnOptionsText}
+                    onChange={(event) => {
+                      setColumnOptionsText(event.target.value);
+                      if (error) setError("");
+                    }}
+                    className="min-h-28 border rounded px-2 py-1"
+                    placeholder={"Open\nIn Progress\nClosed"}
+                  />
+                </div>
               ) : (
                 <>
                   <input type="hidden" name="columnTargetTableId" value="" />
@@ -251,6 +285,18 @@ export default function AddColumnModal({
                   />
                 </>
               )}
+
+              <input
+                type="hidden"
+                name="columnOptions"
+                value={
+                  columnType === MULTISELECT_COLUMN_TYPE
+                    ? JSON.stringify(
+                        parseMultiselectOptionsInput(columnOptionsText),
+                      )
+                    : "[]"
+                }
+              />
 
               {error ? <p className="text-sm text-red-600">{error}</p> : null}
 

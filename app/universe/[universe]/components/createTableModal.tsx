@@ -3,6 +3,8 @@
 import { useRef, useState, type KeyboardEvent } from "react";
 import {
   DEFAULT_LINK_DISPLAY_FIELD,
+  MULTISELECT_COLUMN_TYPE,
+  parseMultiselectOptionsInput,
   SELF_LINK_TARGET_TABLE,
   TABLE_COLUMN_TYPES,
   normalizeColumnName,
@@ -16,6 +18,7 @@ interface PendingColumn {
   type: TableColumnType;
   targetTableId?: string;
   displayField?: string;
+  options?: string[];
 }
 
 function createPendingColumnId() {
@@ -49,6 +52,7 @@ export default function CreateTableModal({
   const [newColumnDisplayField, setNewColumnDisplayField] = useState(
     DEFAULT_LINK_DISPLAY_FIELD,
   );
+  const [newColumnOptionsText, setNewColumnOptionsText] = useState("");
   const [columnError, setColumnError] = useState("");
   const [submitError, setSubmitError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -69,6 +73,7 @@ export default function CreateTableModal({
     setNewColumnType("text");
     setNewColumnTargetTableId("");
     setNewColumnDisplayField(DEFAULT_LINK_DISPLAY_FIELD);
+    setNewColumnOptionsText("");
     setColumnError("");
     setSubmitError("");
     setIsSubmitting(false);
@@ -106,6 +111,19 @@ export default function CreateTableModal({
       return;
     }
 
+    const parsedMultiselectOptions =
+      newColumnType === MULTISELECT_COLUMN_TYPE
+        ? parseMultiselectOptionsInput(newColumnOptionsText)
+        : [];
+
+    if (
+      newColumnType === MULTISELECT_COLUMN_TYPE &&
+      parsedMultiselectOptions.length === 0
+    ) {
+      setColumnError("Please add at least one allowed value for multiselect.");
+      return;
+    }
+
     setPendingColumns((currentColumns) => [
       ...currentColumns,
       {
@@ -117,7 +135,11 @@ export default function CreateTableModal({
               targetTableId: newColumnTargetTableId,
               displayField: newColumnDisplayField,
             }
-          : {}),
+          : newColumnType === MULTISELECT_COLUMN_TYPE
+            ? {
+                options: parsedMultiselectOptions,
+              }
+            : {}),
       },
     ]);
 
@@ -125,6 +147,7 @@ export default function CreateTableModal({
     setNewColumnType("text");
     setNewColumnTargetTableId("");
     setNewColumnDisplayField(DEFAULT_LINK_DISPLAY_FIELD);
+    setNewColumnOptionsText("");
     setColumnError("");
   }
 
@@ -255,6 +278,10 @@ export default function CreateTableModal({
                           setNewColumnTargetTableId("");
                           setNewColumnDisplayField(DEFAULT_LINK_DISPLAY_FIELD);
                         }
+
+                        if (nextType !== MULTISELECT_COLUMN_TYPE) {
+                          setNewColumnOptionsText("");
+                        }
                       }}
                       className="border rounded px-2 py-1"
                     >
@@ -300,6 +327,24 @@ export default function CreateTableModal({
                           This table
                         </option>
                       </select>
+                    </div>
+                  ) : null}
+
+                  {newColumnType === MULTISELECT_COLUMN_TYPE ? (
+                    <div className="flex min-w-52 flex-1 flex-col gap-1">
+                      <label htmlFor="columnOptions" className="text-sm">
+                        Allowed Values (one per line)
+                      </label>
+                      <textarea
+                        id="columnOptions"
+                        value={newColumnOptionsText}
+                        onChange={(event) => {
+                          setNewColumnOptionsText(event.target.value);
+                          if (columnError) setColumnError("");
+                        }}
+                        placeholder={"Open\nIn Progress\nClosed"}
+                        className="min-h-24 border rounded px-2 py-1"
+                      />
                     </div>
                   ) : null}
 
@@ -369,6 +414,12 @@ export default function CreateTableModal({
                                 : ""}
                             </span>
                           ) : null}
+                          {column.type === MULTISELECT_COLUMN_TYPE ? (
+                            <span className="text-gray-500">
+                              {" "}
+                              [{(column.options ?? []).join(", ")}]
+                            </span>
+                          ) : null}
                         </span>
                         <button
                           type="button"
@@ -397,6 +448,11 @@ export default function CreateTableModal({
                           type="hidden"
                           name="columnDisplayField"
                           value={column.displayField ?? ""}
+                        />
+                        <input
+                          type="hidden"
+                          name="columnOptions"
+                          value={JSON.stringify(column.options ?? [])}
                         />
                       </li>
                     ))}

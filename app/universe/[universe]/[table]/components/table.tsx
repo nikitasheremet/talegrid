@@ -24,6 +24,7 @@ export function Table({
     type: string;
     targetTableId?: string;
     displayField?: string;
+    options?: string[];
   }[];
   updateCell: (
     rowId: string,

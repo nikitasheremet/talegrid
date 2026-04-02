@@ -5,6 +5,7 @@ export interface IColumn {
   type: string;
   targetTableId?: Types.ObjectId | string;
   displayField?: string;
+  options?: string[];
 }
 
 export interface ITable extends Document {
@@ -37,6 +38,11 @@ const ColumnSchema = new Schema<IColumn>(
       trim: true,
       required: false,
     },
+    options: {
+      type: [String],
+      required: false,
+      default: undefined,
+    },
   },
   { _id: false },
 );
@@ -60,5 +66,25 @@ const TableSchema = new Schema<ITable>(
   },
 );
 
+const existingTableModel = mongoose.models.Table as
+  | mongoose.Model<ITable>
+  | undefined;
+
+if (existingTableModel) {
+  const columnsPath = existingTableModel.schema.path("columns") as
+    | { schema?: Schema<IColumn> }
+    | undefined;
+
+  if (columnsPath?.schema && !columnsPath.schema.path("options")) {
+    columnsPath.schema.add({
+      options: {
+        type: [String],
+        required: false,
+        default: undefined,
+      },
+    });
+  }
+}
+
 export const Table =
-  mongoose.models.Table || mongoose.model<ITable>("Table", TableSchema);
+  existingTableModel || mongoose.model<ITable>("Table", TableSchema);

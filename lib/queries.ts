@@ -6,6 +6,8 @@ import {
   DEFAULT_LINK_DISPLAY_FIELD,
   LINK_COLUMN_TYPE,
   MINIMUM_REMAINING_COLUMNS,
+  MULTISELECT_COLUMN_TYPE,
+  normalizeMultiselectOptionValues,
   NUMBER_COLUMN_TYPE,
   parseStrictNumberValue,
   SELF_LINK_TARGET_TABLE,
@@ -31,6 +33,13 @@ function createDefaultAttribute(type: string): IAttributeValue {
     return {
       type,
       value: [...EMPTY_LINK_VALUES],
+    };
+  }
+
+  if (type === MULTISELECT_COLUMN_TYPE) {
+    return {
+      type,
+      value: [],
     };
   }
 
@@ -88,6 +97,7 @@ async function normalizeColumnsForPersistence(
     type: string;
     targetTableId?: string | Types.ObjectId;
     displayField?: string;
+    options?: string[];
   }>,
   selfTableId?: Types.ObjectId,
   selfTableFieldNames: string[] = [],
@@ -97,6 +107,7 @@ async function normalizeColumnsForPersistence(
     type: string;
     targetTableId?: Types.ObjectId;
     displayField?: string;
+    options?: string[];
   }>
 > {
   const normalizedColumns: Array<{
@@ -104,6 +115,7 @@ async function normalizeColumnsForPersistence(
     type: string;
     targetTableId?: Types.ObjectId;
     displayField?: string;
+    options?: string[];
   }> = [];
 
   for (const column of columns) {
@@ -111,6 +123,23 @@ async function normalizeColumnsForPersistence(
     const normalizedType = column.type.trim();
 
     if (!normalizedName || !normalizedType) continue;
+
+    if (normalizedType === MULTISELECT_COLUMN_TYPE) {
+      const normalizedOptions = normalizeMultiselectOptionValues(
+        Array.isArray(column.options) ? column.options : [],
+      );
+
+      if (normalizedOptions.length === 0) {
+        continue;
+      }
+
+      normalizedColumns.push({
+        name: normalizedName,
+        type: normalizedType,
+        options: normalizedOptions,
+      });
+      continue;
+    }
 
     if (normalizedType !== LINK_COLUMN_TYPE) {
       normalizedColumns.push({ name: normalizedName, type: normalizedType });
@@ -269,6 +298,68 @@ function validateNumberCellValues(
     normalizedAttributes[numberColumn.name] = {
       type: NUMBER_COLUMN_TYPE,
       value: parsedValue.value,
+    };
+  }
+
+  return normalizedAttributes;
+}
+
+function validateMultiselectCellValues(
+  table: ITable,
+  attributes: Record<string, IAttributeValue>,
+): Record<string, IAttributeValue> {
+  const normalizedAttributes = { ...attributes };
+  const multiselectColumns = table.columns.filter(
+    (column) => column.type === MULTISELECT_COLUMN_TYPE,
+  );
+
+  for (const multiselectColumn of multiselectColumns) {
+    const normalizedOptions = normalizeMultiselectOptionValues(
+      Array.isArray(multiselectColumn.options) ? multiselectColumn.options : [],
+    );
+
+    const cell = normalizedAttributes[multiselectColumn.name] ?? {
+      type: MULTISELECT_COLUMN_TYPE,
+      value: [],
+    };
+
+    const rawValue = cell.value;
+    if (rawValue === null || typeof rawValue === "undefined") {
+      normalizedAttributes[multiselectColumn.name] = {
+        type: MULTISELECT_COLUMN_TYPE,
+        value: [],
+      };
+      continue;
+    }
+
+    if (!Array.isArray(rawValue)) {
+      throw new Error(
+        `Invalid multiselect value for column \"${multiselectColumn.name}\".`,
+      );
+    }
+
+    const requestedValues = rawValue
+      .map((value) => (typeof value === "string" ? value.trim() : ""))
+      .filter((value) => value.length > 0);
+    const requestedValueSet = new Set<string>();
+
+    for (const requestedValue of requestedValues) {
+      if (!normalizedOptions.includes(requestedValue)) {
+        throw new Error(
+          `Invalid multiselect value for column \"${multiselectColumn.name}\".`,
+        );
+      }
+
+      requestedValueSet.add(requestedValue);
+    }
+
+    const orderedValues = normalizedOptions.filter((option) =>
+      requestedValueSet.has(option),
+    );
+
+    normalizedAttributes[multiselectColumn.name] = {
+      type: MULTISELECT_COLUMN_TYPE,
+      value: orderedValues,
     };
   }
 
@@ -457,6 +548,7 @@ export async function createTable(
     type: string;
     targetTableId?: string | Types.ObjectId;
     displayField?: string;
+    options?: string[];
   }>,
 ): Promise<ITable | null> {
   const universe = await getUniverseDocumentByName(universeName);
@@ -500,6 +592,7 @@ export async function addColumnToTable(
     type: string;
     targetTableId?: string | Types.ObjectId;
     displayField?: string;
+    options?: string[];
   },
 ): Promise<ITable | null> {
   await connectDB();
@@ -618,9 +711,13 @@ export async function createTableRow(
     table,
     attributes,
   );
-  const validatedAttributes = validateNumberCellValues(
+  const multiselectValidatedAttributes = validateMultiselectCellValues(
     table,
     linkValidatedAttributes,
+  );
+  const validatedAttributes = validateNumberCellValues(
+    table,
+    multiselectValidatedAttributes,
   );
 
   const row = new TableRow({
@@ -647,9 +744,13 @@ export async function updateTableRow(
     table,
     attributes,
   );
-  const validatedAttributes = validateNumberCellValues(
+  const multiselectValidatedAttributes = validateMultiselectCellValues(
     table,
     linkValidatedAttributes,
+  );
+  const validatedAttributes = validateNumberCellValues(
+    table,
+    multiselectValidatedAttributes,
   );
 
   return TableRow.findByIdAndUpdate(

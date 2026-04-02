@@ -1,7 +1,11 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { LINK_COLUMN_TYPE, NUMBER_COLUMN_TYPE } from "@/lib/table-utils";
+import {
+  LINK_COLUMN_TYPE,
+  MULTISELECT_COLUMN_TYPE,
+  NUMBER_COLUMN_TYPE,
+} from "@/lib/table-utils";
 
 const DEBOUNCE_TIMEOUT_MS = 1000;
 const LINK_LABEL_PREVIEW_LIMIT = 3;
@@ -11,6 +15,7 @@ export default function TablCell({
   rowId,
   cellValue,
   linkOptions,
+  multiselectOptions,
   updateCell,
 }: {
   rowId: string;
@@ -20,6 +25,7 @@ export default function TablCell({
     type: string;
   };
   linkOptions: Array<{ id: string; label: string }>;
+  multiselectOptions: string[];
   updateCell: (
     rowId: string,
     attributeName: string,
@@ -34,6 +40,7 @@ export default function TablCell({
         : "",
   );
   const [isPickerOpen, setIsPickerOpen] = useState(false);
+  const [isMultiselectOpen, setIsMultiselectOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [selectedIds, setSelectedIds] = useState<string[]>(
     Array.isArray(cellValue.value) ? cellValue.value : [],
@@ -69,6 +76,15 @@ export default function TablCell({
     setIsPickerOpen(false);
   }
 
+  function saveSelectedOptions() {
+    const orderedSelections = multiselectOptions.filter((option) =>
+      selectedIds.includes(option),
+    );
+
+    void updateCell(rowId, cellValue.id, orderedSelections);
+    setIsMultiselectOpen(false);
+  }
+
   const filteredOptions = useMemo(() => {
     const normalizedQuery = search.trim().toLowerCase();
     if (!normalizedQuery) return linkOptions;
@@ -84,6 +100,95 @@ export default function TablCell({
     );
     return selectedIds.map((id) => labelsById.get(id) ?? id);
   }, [linkOptions, selectedIds]);
+
+  const filteredMultiselectOptions = useMemo(() => {
+    const normalizedQuery = search.trim().toLowerCase();
+    if (!normalizedQuery) return multiselectOptions;
+
+    return multiselectOptions.filter((option) =>
+      option.toLowerCase().includes(normalizedQuery),
+    );
+  }, [multiselectOptions, search]);
+
+  const selectedMultiselectValues = useMemo(
+    () => multiselectOptions.filter((option) => selectedIds.includes(option)),
+    [multiselectOptions, selectedIds],
+  );
+
+  if (cellValue.type === MULTISELECT_COLUMN_TYPE) {
+    return (
+      <td className="relative">
+        <button
+          type="button"
+          className="min-w-32 rounded border px-2 py-1 text-left"
+          onClick={() => setIsMultiselectOpen((current) => !current)}
+        >
+          {selectedMultiselectValues.length === 0
+            ? "Select options"
+            : selectedMultiselectValues.join(", ")}
+        </button>
+
+        {isMultiselectOpen ? (
+          <div className="absolute left-0 top-full z-20 mt-1 w-64 rounded border bg-white p-2 shadow-lg">
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search options"
+              className="mb-2 w-full rounded border px-2 py-1"
+            />
+
+            <div className="mb-2 max-h-44 overflow-auto rounded border p-2">
+              {filteredMultiselectOptions.length === 0 ? (
+                <p className="text-sm text-gray-500">No options found.</p>
+              ) : (
+                <ul className="flex flex-col gap-1">
+                  {filteredMultiselectOptions.map((option) => (
+                    <li key={option}>
+                      <label className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 hover:bg-gray-100">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.includes(option)}
+                          onChange={() => toggleSelected(option)}
+                        />
+                        <span>{option}</span>
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            <div className="flex justify-between gap-2">
+              <button
+                type="button"
+                className="rounded border px-2 py-1 text-sm"
+                onClick={() => setSelectedIds([])}
+              >
+                Clear
+              </button>
+
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  className="rounded border px-2 py-1 text-sm"
+                  onClick={() => setIsMultiselectOpen(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="rounded border px-2 py-1 text-sm"
+                  onClick={saveSelectedOptions}
+                >
+                  Save
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </td>
+    );
+  }
 
   if (cellValue.type !== LINK_COLUMN_TYPE) {
     return (
