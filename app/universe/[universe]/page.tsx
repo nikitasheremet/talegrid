@@ -5,6 +5,7 @@ import {
   normalizeTableName,
   parseTableColumnsFromFormData,
 } from "@/lib/table-utils";
+import Breadcrumbs from "@/app/components/breadcrumbs";
 import TablesList from "./components/tablesList";
 
 export default async function UniverseView({
@@ -13,6 +14,7 @@ export default async function UniverseView({
   params: Promise<{ universe: string }>;
 }) {
   const { universe } = await params;
+  const universePath = `/universe/${encodeURIComponent(universe)}`;
   const tables = await getTablesByUniverseName(universe);
 
   async function addTable(formData: FormData) {
@@ -29,6 +31,14 @@ export default async function UniverseView({
   return (
     <>
       <div className="flex flex-col items-center p-5 gap-5">
+        <div className="w-full max-w-6xl">
+          <Breadcrumbs
+            items={[
+              { label: "Home", href: "/" },
+              { label: universe, href: universePath },
+            ]}
+          />
+        </div>
         <h1 className="text-xl">
           Welcome to <span className="font-bold">{universe}</span>
         </h1>

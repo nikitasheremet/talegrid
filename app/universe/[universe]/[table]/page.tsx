@@ -25,6 +25,7 @@ import {
   parseSelectedColumnNamesFromFormData,
   TABLE_COLUMN_TYPES,
 } from "@/lib/table-utils";
+import Breadcrumbs from "@/app/components/breadcrumbs";
 
 function getRowLabel(
   attributes: Record<string, { type: string; value: unknown }> | undefined,
@@ -59,6 +60,8 @@ export default async function TableView({
   params: Promise<{ table: string; universe: string }>;
 }) {
   const { table: tableName, universe } = await params;
+  const universePath = `/universe/${encodeURIComponent(universe)}`;
+  const tablePath = `${universePath}/${encodeURIComponent(tableName)}`;
 
   const tableData = await getTableByNameAndUniverse(universe, tableName);
   if (!tableData) {
@@ -285,6 +288,13 @@ export default async function TableView({
 
   return (
     <div className="p-5 flex flex-col gap-5">
+      <Breadcrumbs
+        items={[
+          { label: "Home", href: "/" },
+          { label: universe, href: universePath },
+          { label: tableName, href: tablePath },
+        ]}
+      />
       <div className="flex items-center justify-between">
         <h1 className="text-xl">{tableName}</h1>
         <TableSettingsMenu
