@@ -40,9 +40,7 @@ export default function TablesList({
           const tablePath = `/universe/${encodeURIComponent(universe)}/${encodeURIComponent(table.name)}`;
           return (
             <li key={table.id} className="mb-5">
-              <Link href={tablePath}>
-                {table.name}
-              </Link>
+              <Link href={tablePath}>{table.name}</Link>
             </li>
           );
         })}
