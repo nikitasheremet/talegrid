@@ -8,12 +8,21 @@ import {
 import Breadcrumbs from "@/app/components/breadcrumbs";
 import TablesList from "./components/tablesList";
 
+function decodeRouteSegment(segment: string): string {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return segment;
+  }
+}
+
 export default async function UniverseView({
   params,
 }: {
   params: Promise<{ universe: string }>;
 }) {
-  const { universe } = await params;
+  const { universe: universeParam } = await params;
+  const universe = decodeRouteSegment(universeParam);
   const universePath = `/universe/${encodeURIComponent(universe)}`;
   const tables = await getTablesByUniverseName(universe);
 
@@ -25,7 +34,7 @@ export default async function UniverseView({
     if (!tableName) return;
 
     await createTable(universe, tableName, columns);
-    revalidatePath(`/universe/${universe}`, "page");
+    revalidatePath(universePath, "page");
   }
 
   return (

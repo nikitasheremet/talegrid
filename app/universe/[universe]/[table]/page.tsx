@@ -27,6 +27,14 @@ import {
 } from "@/lib/table-utils";
 import Breadcrumbs from "@/app/components/breadcrumbs";
 
+function decodeRouteSegment(segment: string): string {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return segment;
+  }
+}
+
 function getRowLabel(
   attributes: Record<string, { type: string; value: unknown }> | undefined,
   rowId: string,
@@ -59,7 +67,9 @@ export default async function TableView({
 }: {
   params: Promise<{ table: string; universe: string }>;
 }) {
-  const { table: tableName, universe } = await params;
+  const { table: tableParam, universe: universeParam } = await params;
+  const tableName = decodeRouteSegment(tableParam);
+  const universe = decodeRouteSegment(universeParam);
   const universePath = `/universe/${encodeURIComponent(universe)}`;
   const tablePath = `${universePath}/${encodeURIComponent(tableName)}`;
 
@@ -136,7 +146,7 @@ export default async function TableView({
 
     try {
       await updateTableRow(rowId, updatedAttributes);
-      revalidatePath(`/universe/${universe}/${tableName}`, "page");
+      revalidatePath(tablePath, "page");
       return {};
     } catch (error) {
       if (
@@ -204,7 +214,7 @@ export default async function TableView({
       options,
     });
 
-    revalidatePath(`/universe/${universe}/${tableName}`, "page");
+    revalidatePath(tablePath, "page");
   }
 
   async function addNewEmptyRow() {
@@ -226,7 +236,7 @@ export default async function TableView({
     });
 
     await createTableRow(tableId, newAttributes);
-    revalidatePath(`/universe/${universe}/${tableName}`, "page");
+    revalidatePath(tablePath, "page");
   }
 
   async function deleteColumns(formData: FormData) {
@@ -253,7 +263,7 @@ export default async function TableView({
     }
 
     await deleteColumnsFromTable(tableId, selectedColumnNames);
-    revalidatePath(`/universe/${universe}/${tableName}`, "page");
+    revalidatePath(tablePath, "page");
   }
 
   async function editColumn(formData: FormData) {
@@ -283,7 +293,7 @@ export default async function TableView({
       newColumnName,
       options: columnOptions,
     });
-    revalidatePath(`/universe/${universe}/${tableName}`, "page");
+    revalidatePath(tablePath, "page");
   }
 
   return (

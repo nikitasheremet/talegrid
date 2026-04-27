@@ -37,9 +37,10 @@ export default function TablesList({
     <>
       <ul className="self-left">
         {tables.map((table) => {
+          const tablePath = `/universe/${encodeURIComponent(universe)}/${encodeURIComponent(table.name)}`;
           return (
             <li key={table.id} className="mb-5">
-              <Link href={`/universe/${universe}/${table.name}`}>
+              <Link href={tablePath}>
                 {table.name}
               </Link>
             </li>
