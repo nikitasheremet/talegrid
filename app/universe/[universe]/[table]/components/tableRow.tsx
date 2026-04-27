@@ -4,7 +4,7 @@ import {
   MULTISELECT_COLUMN_TYPE,
   NUMBER_COLUMN_TYPE,
 } from "@/lib/table-utils";
-import TableCell from "./tableCell";
+import TableCell, { type TableCellValue } from "./tableCell";
 
 export default function TableRow({
   id,
@@ -12,6 +12,7 @@ export default function TableRow({
   columns,
   linkOptionsByColumn,
   updateCell,
+  onExpandRow,
 }: {
   id: string;
   attributes: {
@@ -34,8 +35,9 @@ export default function TableRow({
     cellId: string,
     value: string | string[] | number | null,
   ) => Promise<{ error?: string }>;
+  onExpandRow: (rowId: string) => void;
 }) {
-  const rowValues = useMemo(() => {
+  const rowValues: TableCellValue[] = useMemo(() => {
     return columns.map((column) => {
       const attribute = attributes[column.name];
 
@@ -55,19 +57,11 @@ export default function TableRow({
     });
   }, [attributes, columns]);
 
-  const cellKeySuffix = useMemo(() => id, [id]);
-
-  function getCellValueKey(value: string | string[] | number | null) {
-    if (value === null) return "null";
-    if (typeof value === "number") return `${value}`;
-    return Array.isArray(value) ? value.join("|") : value;
-  }
-
   return (
-    <tr>
-      {rowValues.map((value) => (
+    <tr className="group transition-colors hover:bg-slate-200/40">
+      {rowValues.map((value, index) => (
         <TableCell
-          key={`${value.id}-${cellKeySuffix}-${getCellValueKey(value.value)}`}
+          key={`${value.id}-${id}`}
           rowId={id}
           cellValue={value}
           linkOptions={linkOptionsByColumn[value.id] ?? []}
@@ -75,6 +69,20 @@ export default function TableRow({
             columns.find((column) => column.name === value.id)?.options ?? []
           }
           updateCell={updateCell}
+          className={index === 0 ? "relative pl-14" : undefined}
+          overlayAction={
+            index === 0 ? (
+              <button
+                type="button"
+                className="pointer-events-none rounded border bg-white px-2 py-1 text-xs opacity-0 shadow transition-opacity group-hover:pointer-events-auto group-hover:opacity-100"
+                onClick={() => onExpandRow(id)}
+                aria-label="Expand row details"
+                title="Expand row"
+              >
+                Expand
+              </button>
+            ) : undefined
+          }
         />
       ))}
     </tr>

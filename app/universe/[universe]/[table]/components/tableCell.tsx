@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   LINK_COLUMN_TYPE,
   MULTISELECT_COLUMN_TYPE,
@@ -9,21 +9,32 @@ import {
 
 const DEBOUNCE_TIMEOUT_MS = 1000;
 const LINK_LABEL_PREVIEW_LIMIT = 3;
-let debounceTimer: NodeJS.Timeout;
 
-export default function TablCell({
-  rowId,
-  cellValue,
-  linkOptions,
-  multiselectOptions,
-  updateCell,
-}: {
+function toInputValue(value: string | string[] | number | null) {
+  if (typeof value === "number") {
+    return `${value}`;
+  }
+
+  if (typeof value === "string") {
+    return value;
+  }
+
+  return "";
+}
+
+function toSelectedIds(value: string | string[] | number | null) {
+  return Array.isArray(value) ? value : [];
+}
+
+export interface TableCellValue {
+  value: string | string[] | number | null;
+  id: string;
+  type: string;
+}
+
+interface BaseEditorProps {
   rowId: string;
-  cellValue: {
-    value: string | string[] | number | null;
-    id: string;
-    type: string;
-  };
+  cellValue: TableCellValue;
   linkOptions: Array<{ id: string; label: string }>;
   multiselectOptions: string[];
   updateCell: (
@@ -31,58 +42,134 @@ export default function TablCell({
     attributeName: string,
     value: string | string[] | number | null,
   ) => Promise<{ error?: string }>;
-}) {
-  const [value, setCellValue] = useState(
-    typeof cellValue.value === "number"
-      ? `${cellValue.value}`
-      : typeof cellValue.value === "string"
-        ? cellValue.value
-        : "",
+  mode?: "table" | "field";
+  inputId?: string;
+}
+
+interface TableCellProps extends BaseEditorProps {
+  className?: string;
+  overlayAction?: React.ReactNode;
+}
+
+export function CellEditor({
+  rowId,
+  cellValue,
+  linkOptions,
+  multiselectOptions,
+  updateCell,
+  mode = "table",
+  inputId,
+}: BaseEditorProps) {
+  const isFieldMode = mode === "field";
+
+  const persistedTextValue = toInputValue(cellValue.value);
+  const persistedSelectedIds = toSelectedIds(cellValue.value);
+
+  const [draftValue, setDraftValue] = useState<string | null>(null);
+  const [draftSelectedIds, setDraftSelectedIds] = useState<string[] | null>(
+    null,
   );
   const [isPickerOpen, setIsPickerOpen] = useState(false);
   const [isMultiselectOpen, setIsMultiselectOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const [selectedIds, setSelectedIds] = useState<string[]>(
-    Array.isArray(cellValue.value) ? cellValue.value : [],
-  );
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const multiselectContainerRef = useRef<HTMLDivElement | null>(null);
+
+  const activeSelectedIds = draftSelectedIds ?? persistedSelectedIds;
+  const renderedInputValue = draftValue ?? persistedTextValue;
+
+  useEffect(() => {
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isMultiselectOpen) return;
+
+    function closeOnOutsideClick(event: MouseEvent) {
+      const target = event.target;
+      if (
+        target instanceof Node &&
+        multiselectContainerRef.current &&
+        !multiselectContainerRef.current.contains(target)
+      ) {
+        setIsMultiselectOpen(false);
+        setDraftSelectedIds(null);
+        setSearch("");
+      }
+    }
+
+    document.addEventListener("mousedown", closeOnOutsideClick);
+
+    return () => {
+      document.removeEventListener("mousedown", closeOnOutsideClick);
+    };
+  }, [isMultiselectOpen]);
 
   function updateValue(
     currentRowId: string,
     cellId: string,
-    event: React.ChangeEvent<HTMLInputElement>,
+    event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
   ) {
-    clearTimeout(debounceTimer);
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
 
     const nextValue = event.target.value;
-    debounceTimer = setTimeout(() => {
-      void updateCell(currentRowId, cellId, nextValue);
+    debounceTimerRef.current = setTimeout(() => {
+      void updateCell(currentRowId, cellId, nextValue).then((result) => {
+        if (!result.error) {
+          setDraftValue((currentValue) =>
+            currentValue === nextValue ? null : currentValue,
+          );
+        }
+      });
     }, DEBOUNCE_TIMEOUT_MS);
 
-    setCellValue(nextValue);
+    setDraftValue(nextValue);
   }
 
   function toggleSelected(id: string) {
-    setSelectedIds((currentIds) => {
-      if (currentIds.includes(id)) {
-        return currentIds.filter((currentId) => currentId !== id);
+    setDraftSelectedIds((currentDraftSelection) => {
+      const sourceSelection = currentDraftSelection ?? persistedSelectedIds;
+
+      if (sourceSelection.includes(id)) {
+        return sourceSelection.filter((currentId) => currentId !== id);
       }
 
-      return [...currentIds, id];
+      return [...sourceSelection, id];
     });
   }
 
-  function saveSelectedLinks() {
-    void updateCell(rowId, cellValue.id, selectedIds);
+  async function saveSelectedLinks() {
+    const nextSelection = draftSelectedIds ?? persistedSelectedIds;
+    const result = await updateCell(rowId, cellValue.id, nextSelection);
+    if (result.error) {
+      return;
+    }
+
+    setDraftSelectedIds(null);
     setIsPickerOpen(false);
+    setSearch("");
   }
 
-  function saveSelectedOptions() {
+  async function saveSelectedOptions() {
+    const nextSelection = draftSelectedIds ?? persistedSelectedIds;
     const orderedSelections = multiselectOptions.filter((option) =>
-      selectedIds.includes(option),
+      nextSelection.includes(option),
     );
 
-    void updateCell(rowId, cellValue.id, orderedSelections);
+    const result = await updateCell(rowId, cellValue.id, orderedSelections);
+    if (result.error) {
+      return;
+    }
+
+    setDraftSelectedIds(null);
     setIsMultiselectOpen(false);
+    setSearch("");
   }
 
   const filteredOptions = useMemo(() => {
@@ -94,12 +181,12 @@ export default function TablCell({
     );
   }, [linkOptions, search]);
 
-  const selectedLabels = useMemo(() => {
-    const labelsById = new Map(
-      linkOptions.map((option) => [option.id, option.label]),
-    );
-    return selectedIds.map((id) => labelsById.get(id) ?? id);
-  }, [linkOptions, selectedIds]);
+  const labelsById = new Map(
+    linkOptions.map((option) => [option.id, option.label]),
+  );
+  const selectedLabels = activeSelectedIds.map(
+    (id) => labelsById.get(id) ?? id,
+  );
 
   const filteredMultiselectOptions = useMemo(() => {
     const normalizedQuery = search.trim().toLowerCase();
@@ -110,18 +197,34 @@ export default function TablCell({
     );
   }, [multiselectOptions, search]);
 
-  const selectedMultiselectValues = useMemo(
-    () => multiselectOptions.filter((option) => selectedIds.includes(option)),
-    [multiselectOptions, selectedIds],
+  const selectedMultiselectValues = multiselectOptions.filter((option) =>
+    activeSelectedIds.includes(option),
   );
 
   if (cellValue.type === MULTISELECT_COLUMN_TYPE) {
     return (
-      <td className="relative">
+      <div
+        ref={multiselectContainerRef}
+        className={isFieldMode ? "relative" : "relative inline-block"}
+      >
         <button
           type="button"
-          className="min-w-32 rounded border px-2 py-1 text-left"
-          onClick={() => setIsMultiselectOpen((current) => !current)}
+          className={
+            isFieldMode
+              ? "w-full rounded border px-2 py-1 text-left"
+              : "min-w-32 rounded border px-2 py-1 text-left"
+          }
+          onClick={() => {
+            if (isMultiselectOpen) {
+              setIsMultiselectOpen(false);
+              setDraftSelectedIds(null);
+              setSearch("");
+              return;
+            }
+
+            setDraftSelectedIds([...persistedSelectedIds]);
+            setIsMultiselectOpen(true);
+          }}
         >
           {selectedMultiselectValues.length === 0
             ? "Select options"
@@ -129,7 +232,13 @@ export default function TablCell({
         </button>
 
         {isMultiselectOpen ? (
-          <div className="absolute left-0 top-full z-20 mt-1 w-64 rounded border bg-white p-2 shadow-lg">
+          <div
+            className={
+              isFieldMode
+                ? "absolute left-0 right-0 top-full z-20 mt-1 rounded border bg-white p-2 shadow-lg"
+                : "absolute left-0 top-full z-20 mt-1 w-64 rounded border bg-white p-2 shadow-lg"
+            }
+          >
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
@@ -147,7 +256,7 @@ export default function TablCell({
                       <label className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 hover:bg-gray-100">
                         <input
                           type="checkbox"
-                          checked={selectedIds.includes(option)}
+                          checked={activeSelectedIds.includes(option)}
                           onChange={() => toggleSelected(option)}
                         />
                         <span>{option}</span>
@@ -162,7 +271,7 @@ export default function TablCell({
               <button
                 type="button"
                 className="rounded border px-2 py-1 text-sm"
-                onClick={() => setSelectedIds([])}
+                onClick={() => setDraftSelectedIds([])}
               >
                 Clear
               </button>
@@ -171,7 +280,11 @@ export default function TablCell({
                 <button
                   type="button"
                   className="rounded border px-2 py-1 text-sm"
-                  onClick={() => setIsMultiselectOpen(false)}
+                  onClick={() => {
+                    setIsMultiselectOpen(false);
+                    setDraftSelectedIds(null);
+                    setSearch("");
+                  }}
                 >
                   Cancel
                 </button>
@@ -186,30 +299,61 @@ export default function TablCell({
             </div>
           </div>
         ) : null}
-      </td>
+      </div>
     );
   }
 
   if (cellValue.type !== LINK_COLUMN_TYPE) {
-    return (
-      <td>
-        <input
-          type={cellValue.type === NUMBER_COLUMN_TYPE ? "number" : "text"}
-          step={cellValue.type === NUMBER_COLUMN_TYPE ? "any" : undefined}
-          value={value}
+    if (cellValue.type === "longtext" && isFieldMode) {
+      return (
+        <textarea
+          id={inputId}
+          value={renderedInputValue}
           onChange={(event) => updateValue(rowId, cellValue.id, event)}
+          rows={isFieldMode ? 8 : 4}
+          className={
+            isFieldMode
+              ? "w-full rounded border px-2 py-1"
+              : "min-w-48 rounded border px-2 py-1"
+          }
           suppressHydrationWarning={true}
-        ></input>
-      </td>
+        ></textarea>
+      );
+    }
+
+    return (
+      <input
+        id={inputId}
+        type={cellValue.type === NUMBER_COLUMN_TYPE ? "number" : "text"}
+        step={cellValue.type === NUMBER_COLUMN_TYPE ? "any" : undefined}
+        value={renderedInputValue}
+        onChange={(event) => updateValue(rowId, cellValue.id, event)}
+        className={
+          isFieldMode
+            ? "w-full rounded border px-2 py-1"
+            : cellValue.type === "longtext"
+              ? "w-full min-w-0 truncate"
+              : undefined
+        }
+        title={cellValue.type === "longtext" ? renderedInputValue : undefined}
+        suppressHydrationWarning={true}
+      ></input>
     );
   }
 
   return (
-    <td>
+    <>
       <button
         type="button"
-        className="min-w-32 rounded border px-2 py-1 text-left"
-        onClick={() => setIsPickerOpen(true)}
+        className={
+          isFieldMode
+            ? "w-full rounded border px-2 py-1 text-left"
+            : "min-w-32 rounded border px-2 py-1 text-left"
+        }
+        onClick={() => {
+          setDraftSelectedIds([...persistedSelectedIds]);
+          setIsPickerOpen(true);
+        }}
       >
         {selectedLabels.length === 0
           ? "Select links"
@@ -220,7 +364,7 @@ export default function TablCell({
       </button>
 
       {isPickerOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+        <div className="fixed inset-0 z-70 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-xl rounded-lg bg-white p-4 shadow-2xl">
             <h3 className="mb-3 text-base font-semibold">Select linked rows</h3>
 
@@ -241,7 +385,7 @@ export default function TablCell({
                       <label className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 hover:bg-gray-100">
                         <input
                           type="checkbox"
-                          checked={selectedIds.includes(option.id)}
+                          checked={activeSelectedIds.includes(option.id)}
                           onChange={() => toggleSelected(option.id)}
                         />
                         <span>{option.label}</span>
@@ -256,7 +400,7 @@ export default function TablCell({
               <button
                 type="button"
                 className="rounded border px-3 py-1"
-                onClick={() => setSelectedIds([])}
+                onClick={() => setDraftSelectedIds([])}
               >
                 Clear
               </button>
@@ -265,7 +409,11 @@ export default function TablCell({
                 <button
                   type="button"
                   className="rounded border px-3 py-1"
-                  onClick={() => setIsPickerOpen(false)}
+                  onClick={() => {
+                    setIsPickerOpen(false);
+                    setDraftSelectedIds(null);
+                    setSearch("");
+                  }}
                 >
                   Cancel
                 </button>
@@ -281,6 +429,34 @@ export default function TablCell({
           </div>
         </div>
       ) : null}
+    </>
+  );
+}
+
+export default function TablCell({
+  rowId,
+  cellValue,
+  linkOptions,
+  multiselectOptions,
+  updateCell,
+  className,
+  overlayAction,
+}: TableCellProps) {
+  return (
+    <td className={className}>
+      {overlayAction ? (
+        <div className="absolute left-2 top-1/2 z-10 -translate-y-1/2">
+          {overlayAction}
+        </div>
+      ) : null}
+
+      <CellEditor
+        rowId={rowId}
+        cellValue={cellValue}
+        linkOptions={linkOptions}
+        multiselectOptions={multiselectOptions}
+        updateCell={updateCell}
+      />
     </td>
   );
 }
