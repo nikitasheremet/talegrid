@@ -1,7 +1,12 @@
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import CreateUniverseModal from "@/app/components/createUniverseModal";
-import { createUniverseIfNotExists, getAllUniverses } from "@/lib/queries";
+import DeleteUniverseButton from "@/app/components/deleteUniverseButton";
+import {
+  createUniverseIfNotExists,
+  deleteUniverseByIdWithCascade,
+  getAllUniverses,
+} from "@/lib/queries";
 import { normalizeUniverseName } from "@/lib/table-utils";
 
 export default async function Home() {
@@ -22,6 +27,32 @@ export default async function Home() {
     return {};
   }
 
+  async function deleteUniverse(
+    formData: FormData,
+  ): Promise<{ error?: string }> {
+    "use server";
+
+    const universeIdValue = formData.get("universeId");
+    const universeName = normalizeUniverseName(formData.get("universeName"));
+    const universeId =
+      typeof universeIdValue === "string" ? universeIdValue.trim() : "";
+
+    if (!universeId || !universeName) {
+      return { error: "Invalid universe selection." };
+    }
+
+    const result = await deleteUniverseByIdWithCascade(
+      universeId,
+      universeName,
+    );
+    if (!result.success) {
+      return { error: result.error };
+    }
+
+    revalidatePath("/", "page");
+    return {};
+  }
+
   const universes = await getAllUniverses();
 
   return (
@@ -32,14 +63,21 @@ export default async function Home() {
         {universes.map((universe) => (
           <li
             key={universe._id.toString()}
-            className="my-4 cursor-pointer hover:bg-gray-100 p-2 rounded-md"
+            className="group my-4 rounded-md p-2 transition hover:bg-gray-100 focus-within:bg-gray-100"
           >
-            <Link
-              className="w-full block"
-              href={`/universe/${encodeURIComponent(universe.name)}`}
-            >
-              {universe.name}
-            </Link>
+            <div className="flex items-center gap-2">
+              <Link
+                className="block grow rounded-sm"
+                href={`/universe/${encodeURIComponent(universe.name)}`}
+              >
+                {universe.name}
+              </Link>
+              <DeleteUniverseButton
+                universeId={universe._id.toString()}
+                universeName={universe.name}
+                onDelete={deleteUniverse}
+              />
+            </div>
           </li>
         ))}
       </ul>

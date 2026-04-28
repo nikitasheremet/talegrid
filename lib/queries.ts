@@ -548,6 +548,76 @@ export async function createUniverseIfNotExists(
   return { created: true };
 }
 
+export type DeleteUniverseCascadeResult =
+  | { success: true }
+  | { success: false; error: string };
+
+export async function deleteUniverseByIdWithCascade(
+  universeId: string | Types.ObjectId,
+  expectedUniverseName?: string,
+): Promise<DeleteUniverseCascadeResult> {
+  await connectDB();
+
+  const normalizedUniverseId = normalizeId(universeId).trim();
+  if (!isObjectIdString(normalizedUniverseId)) {
+    return { success: false, error: "Invalid universe selection." };
+  }
+
+  try {
+    const universe = await Universe.findById(normalizedUniverseId)
+      .select("_id name")
+      .lean()
+      .exec();
+
+    if (!universe) {
+      return { success: false, error: "Universe not found." };
+    }
+
+    if (
+      expectedUniverseName &&
+      universe.name.trim().toLowerCase() !==
+        expectedUniverseName.trim().toLowerCase()
+    ) {
+      return {
+        success: false,
+        error: "Universe details did not match. Please refresh and try again.",
+      };
+    }
+
+    const tables = await Table.find({ universeId: universe._id })
+      .select("_id")
+      .lean()
+      .exec();
+    const tableIds = tables.map((table) => table._id);
+
+    if (tableIds.length > 0) {
+      await TableRow.deleteMany({
+        tableId: { $in: tableIds },
+      }).exec();
+    }
+
+    await Table.deleteMany({ universeId: universe._id }).exec();
+
+    const deleteUniverseResult = await Universe.deleteOne({
+      _id: universe._id,
+    }).exec();
+
+    if (deleteUniverseResult.deletedCount !== 1) {
+      return {
+        success: false,
+        error: "Could not delete universe. Please try again.",
+      };
+    }
+
+    return { success: true };
+  } catch {
+    return {
+      success: false,
+      error: "Could not delete universe. Please try again.",
+    };
+  }
+}
+
 // Create a new table
 export async function createTable(
   universeName: string,

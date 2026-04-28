@@ -7,5 +7,9 @@ export default function Button({
   click: Function;
   buttonText: string;
 }) {
-  return <button onClick={() => click()}>{buttonText}</button>;
+  return (
+    <button className="hover:cursor-pointer" onClick={() => click()}>
+      {buttonText}
+    </button>
+  );
 }
