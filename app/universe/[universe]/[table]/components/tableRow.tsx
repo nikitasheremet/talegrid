@@ -74,7 +74,7 @@ export default function TableRow({
             index === 0 ? (
               <button
                 type="button"
-                className="pointer-events-none rounded border bg-white px-2 py-1 text-xs opacity-0 shadow transition-opacity group-hover:pointer-events-auto group-hover:opacity-100"
+                className="pointer-events-auto rounded border bg-white px-2 py-1 text-xs opacity-100 shadow transition-opacity md:pointer-events-none md:opacity-0 md:group-hover:pointer-events-auto md:group-hover:opacity-100"
                 onClick={() => onExpandRow(id)}
                 aria-label="Expand row details"
                 title="Expand row"
