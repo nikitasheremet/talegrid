@@ -4,6 +4,7 @@ import type { IUniverse, ITable, ITableRow, IAttributeValue } from "./models";
 import { Types } from "mongoose";
 import {
   DEFAULT_LINK_DISPLAY_FIELD,
+  getUniverseNameValidationError,
   LINK_COLUMN_TYPE,
   MINIMUM_REMAINING_COLUMNS,
   MULTISELECT_COLUMN_TYPE,
@@ -551,6 +552,107 @@ export async function createUniverseIfNotExists(
 export type DeleteUniverseCascadeResult =
   | { success: true }
   | { success: false; error: string };
+
+export type RenameUniverseResult =
+  | {
+      success: true;
+      oldName: string;
+      newName: string;
+      renamed: boolean;
+    }
+  | { success: false; error: string };
+
+export async function renameUniverseById(
+  universeId: string | Types.ObjectId,
+  expectedCurrentName: string,
+  nextName: string,
+): Promise<RenameUniverseResult> {
+  await connectDB();
+
+  const normalizedUniverseId = normalizeId(universeId).trim();
+  const normalizedExpectedCurrentName = expectedCurrentName.trim();
+  const normalizedNextName = nextName.trim();
+
+  if (!isObjectIdString(normalizedUniverseId)) {
+    return { success: false, error: "Invalid universe selection." };
+  }
+
+  const expectedNameValidationError = getUniverseNameValidationError(
+    normalizedExpectedCurrentName,
+  );
+  if (expectedNameValidationError) {
+    return { success: false, error: expectedNameValidationError };
+  }
+
+  const nextNameValidationError =
+    getUniverseNameValidationError(normalizedNextName);
+  if (nextNameValidationError) {
+    return { success: false, error: nextNameValidationError };
+  }
+
+  try {
+    const universe = await Universe.findById(normalizedUniverseId).exec();
+    if (!universe) {
+      return { success: false, error: "Universe not found." };
+    }
+
+    const persistedUniverseName = universe.name.trim();
+
+    if (
+      persistedUniverseName.toLowerCase() !==
+      normalizedExpectedCurrentName.toLowerCase()
+    ) {
+      return {
+        success: false,
+        error: "Universe details did not match. Please refresh and try again.",
+      };
+    }
+
+    if (
+      persistedUniverseName.toLowerCase() === normalizedNextName.toLowerCase()
+    ) {
+      return {
+        success: true,
+        oldName: persistedUniverseName,
+        newName: persistedUniverseName,
+        renamed: false,
+      };
+    }
+
+    const existingUniverse = await Universe.findOne({
+      _id: { $ne: universe._id },
+      name: {
+        $regex: `^${escapeRegex(normalizedNextName)}$`,
+        $options: "i",
+      },
+    })
+      .select("_id")
+      .lean()
+      .exec();
+
+    if (existingUniverse) {
+      return {
+        success: false,
+        error: "A universe with that name already exists.",
+      };
+    }
+
+    universe.name = normalizedNextName;
+    await universe.save();
+
+    return {
+      success: true,
+      oldName: persistedUniverseName,
+      newName: normalizedNextName,
+      renamed: true,
+    };
+  } catch {
+    return {
+      success: false,
+      error: "Could not rename universe. Please try again.",
+    };
+  }
+}
 
 export async function deleteUniverseByIdWithCascade(
   universeId: string | Types.ObjectId,

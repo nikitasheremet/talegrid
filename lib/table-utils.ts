@@ -21,6 +21,7 @@ export const DELETE_COLUMN_FORM_FIELD = "selectedColumnName";
 export type TableColumnType = (typeof TABLE_COLUMN_TYPES)[number];
 
 const STRICT_NUMBER_PATTERN = /^-?\d+(\.\d+)?$/;
+const UNIVERSE_NAME_FORBIDDEN_CHARACTER = "/";
 
 function normalizeMultiselectRawOptions(options: string[]): string[] {
   const normalizedOptionsByKey = new Map<string, string>();
@@ -48,6 +49,20 @@ export function normalizeUniverseName(
 ): string {
   if (typeof value !== "string") return "";
   return value.trim();
+}
+
+export function getUniverseNameValidationError(name: string): string | null {
+  const normalizedName = name.trim();
+
+  if (!normalizedName) {
+    return "Universe name is required.";
+  }
+
+  if (normalizedName.includes(UNIVERSE_NAME_FORBIDDEN_CHARACTER)) {
+    return "Universe names cannot include '/'.";
+  }
+
+  return null;
 }
 
 export function normalizeColumnName(value: FormDataEntryValue | null): string {

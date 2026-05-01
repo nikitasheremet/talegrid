@@ -2,20 +2,28 @@ import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import CreateUniverseModal from "@/app/components/createUniverseModal";
 import DeleteUniverseButton from "@/app/components/deleteUniverseButton";
+import EditUniverseButton from "@/app/components/editUniverseButton";
 import {
   createUniverseIfNotExists,
   deleteUniverseByIdWithCascade,
   getAllUniverses,
+  renameUniverseById,
 } from "@/lib/queries";
-import { normalizeUniverseName } from "@/lib/table-utils";
+import {
+  getUniverseNameValidationError,
+  normalizeUniverseName,
+} from "@/lib/table-utils";
 
 export default async function Home() {
   async function addUniverse(formData: FormData): Promise<{ error?: string }> {
     "use server";
 
     const universeName = normalizeUniverseName(formData.get("universeName"));
-    if (!universeName) {
-      return { error: "Universe name is required." };
+    const universeNameValidationError =
+      getUniverseNameValidationError(universeName);
+
+    if (universeNameValidationError) {
+      return { error: universeNameValidationError };
     }
 
     const result = await createUniverseIfNotExists(universeName);
@@ -53,6 +61,56 @@ export default async function Home() {
     return {};
   }
 
+  async function renameUniverse(
+    formData: FormData,
+  ): Promise<{ error?: string }> {
+    "use server";
+
+    const universeIdValue = formData.get("universeId");
+    const currentUniverseName = normalizeUniverseName(
+      formData.get("currentUniverseName"),
+    );
+    const nextUniverseName = normalizeUniverseName(
+      formData.get("nextUniverseName"),
+    );
+    const universeId =
+      typeof universeIdValue === "string" ? universeIdValue.trim() : "";
+
+    if (!universeId) {
+      return { error: "Invalid universe selection." };
+    }
+
+    const currentNameValidationError =
+      getUniverseNameValidationError(currentUniverseName);
+    if (currentNameValidationError) {
+      return { error: currentNameValidationError };
+    }
+
+    const nextNameValidationError =
+      getUniverseNameValidationError(nextUniverseName);
+    if (nextNameValidationError) {
+      return { error: nextNameValidationError };
+    }
+
+    const result = await renameUniverseById(
+      universeId,
+      currentUniverseName,
+      nextUniverseName,
+    );
+
+    if (!result.success) {
+      return { error: result.error };
+    }
+
+    const oldUniversePath = `/universe/${encodeURIComponent(result.oldName)}`;
+    const newUniversePath = `/universe/${encodeURIComponent(result.newName)}`;
+
+    revalidatePath("/", "page");
+    revalidatePath(oldUniversePath, "page");
+    revalidatePath(newUniversePath, "page");
+    return {};
+  }
+
   const universes = await getAllUniverses();
 
   return (
@@ -72,6 +130,11 @@ export default async function Home() {
               >
                 {universe.name}
               </Link>
+              <EditUniverseButton
+                universeId={universe._id.toString()}
+                universeName={universe.name}
+                onRename={renameUniverse}
+              />
               <DeleteUniverseButton
                 universeId={universe._id.toString()}
                 universeName={universe.name}
