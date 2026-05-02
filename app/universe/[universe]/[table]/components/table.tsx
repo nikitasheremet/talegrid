@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import RowDetailsModal from "@/app/universe/[universe]/[table]/components/rowDetailsModal";
 import EditColumnModal from "./editColumnModal";
 import TableRow from "./tableRow";
@@ -41,6 +41,11 @@ export function Table({
   const [editingColumnName, setEditingColumnName] = useState("");
   const [expandedRowId, setExpandedRowId] = useState("");
   const [tableRows, setTableRows] = useState(rows);
+
+  useEffect(() => {
+    setTableRows(rows);
+  }, [rows]);
+
   const editingColumn = columns.find(
     (column) => column.name === editingColumnName,
   );
